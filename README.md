@@ -171,6 +171,19 @@ whole window doesn't redraw its contents. It was disabled upstream for reasons
 not yet known: watch memory and the `[gFBDC]` frame timing in the log, and
 delete the file if anything misbehaves.
 
+## Previews
+
+```sh
+pip install pillow
+python3 tools/preview.py      # writes out/preview/home.png, guide.png, ...
+```
+
+This runs the real Home and TV Guide code against Enigma2 stand-ins with
+made-up Irish channels, presses a few keys, and draws each screen where the
+code left every widget. It's close to, not identical with, what the box draws,
+and it's good for catching layout, overlap and colour mistakes. GitHub builds
+the same previews on every push (the **halo-previews** artifact).
+
 ## Tests
 
 ```sh

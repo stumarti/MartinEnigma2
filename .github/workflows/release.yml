@@ -67,6 +67,17 @@ jobs:
           test "${TAG_VERSION%%-*}" = "$(tr -d '[:space:]' < VERSION)" || {
             echo "Tag $RELEASE_TAG does not match VERSION $(cat VERSION)"; exit 1; }
 
+      - name: Render screen previews
+        run: |
+          sudo apt-get install -y -q fonts-liberation >/dev/null
+          pip install -q pillow
+          python tools/preview.py --out preview
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: halo-previews
+          path: preview/
+
       - name: Build packages
         run: SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) python tools/build_ipk.py --repo "$GITHUB_REPOSITORY" --out out
 

@@ -419,6 +419,7 @@ class HomeTests(unittest.TestCase):
 		self.assertEqual(home.first, 2)
 		self.assertEqual(self.ringSlot(home), 1)
 		self.assertIn("Channel 4", home["meta"].text)
+		self.assertEqual(home["badge"].text, "LIVE")
 		self.assertTrue(home["title"].text.startswith("Show 3-"))
 		self.assertIn("min left", home["left"].text)
 		self.assertTrue(home["next"].text)
@@ -451,6 +452,7 @@ class HomeTests(unittest.TestCase):
 		self.assertEqual(self.ringSlot(home), 5)
 		self.assertEqual(home["name5"].text, "Channel 9")
 		self.assertIn("Channel 9", home["meta"].text)
+		self.assertEqual(home["badge"].text, "ON NOW")
 
 	def test_wraps_from_the_last_channel_to_the_first(self):
 		home = self.openHome(start=9)

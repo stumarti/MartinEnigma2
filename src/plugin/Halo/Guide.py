@@ -84,7 +84,7 @@ def _skin():
 		add('<widget name="channel%d" position="%d,%d" size="%d,%d" font="Regular;24" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" noWrap="1" zPosition="1" />' % (r, CHANNEL_X, y, CHANNEL_W, ROW_H, S.S_INK, S.S_CARD))
 		for c in range(CELLS_PER_ROW):
 			add('<widget name="cell%d_%d" position="%d,%d" size="10,%d" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" zPosition="1" />' % (r, c, GRID_X, y, ROW_H, S.S_INK, S.S_CARD))
-	add('<widget name="now" position="%d,%d" size="3,%d" backgroundColor="%s" zPosition="3" />' % (GRID_X, RULER_Y, GRID_Y - RULER_Y + ROWS * ROW_PITCH - (ROW_PITCH - ROW_H), S.S_ACCENT))
+	add('<widget name="now" position="%d,%d" size="3,%d" backgroundColor="%s" zPosition="3" />' % (GRID_X, GRID_Y - 8, ROWS * ROW_PITCH - (ROW_PITCH - ROW_H) + 8, S.S_ACCENT))
 	add('<widget name="focus" position="%d,%d" size="200,%d" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" zPosition="4" />' % (GRID_X, GRID_Y, ROW_H, S.S_DARK, S.S_INK))
 	add('</screen>')
 	return "\n".join(parts)
@@ -151,7 +151,7 @@ class HaloGuide(Screen):
 			self["channel%d" % r] = Label("")
 			for c in range(CELLS_PER_ROW):
 				self["cell%d_%d" % (r, c)] = Label("")
-		self["hint"].setText(_("◀ ▶ programmes    ▲ ▼ channels    CH+/- page"))
+		self["hint"].setText(_("Left/right: programmes    Up/down: channels    CH+/-: page"))
 		self["chipWatch"].setText(_("OK  Watch"))
 		self["bouquet"].setText(bouquetName or _("All channels"))
 		self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "ColorActions", "ChannelSelectBaseActions"], {

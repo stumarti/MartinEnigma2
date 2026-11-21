@@ -14,7 +14,7 @@
 from os.path import exists
 from time import localtime, strftime, time
 
-from enigma import eSize, ePoint, eTimer
+from enigma import eSize, ePoint, eTimer, gRGB
 
 from Components.ActionMap import ActionMap
 from Components.Label import Label
@@ -31,6 +31,8 @@ TILE_W, TILE_H = 268, 150
 TILE_STEP = 292
 RING = 4               # ring thickness around the focused tile
 PROGRESS_W = 520       # the now-playing progress bar
+BADGE_LIVE = gRGB(0x005B9BFF)   # the channel you're watching
+BADGE_OTHER = gRGB(0xB0FFFFFF)  # any other channel: translucent white
 
 
 def _hm(t):
@@ -50,15 +52,15 @@ def _skin():
 	add('<eLabel position="0,400" size="1920,680" backgroundColor="%s" zPosition="0" />' % S.S_SHADE)
 	parts.extend(Chrome.headerSkin(S.S_SHADE, 0, interactive=True))
 	# What's on now.
-	add('<eLabel text="LIVE" position="96,424" size="84,36" font="Regular;20" foregroundColor="%s" backgroundColor="%s" cornerRadius="8" halign="center" valign="center" zPosition="1" />' % (S.S_DARK, S.S_ACCENT))
-	add('<widget name="meta" position="196,420" size="1000,44" font="Regular;26" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK_QUIET, S.S_SHADE))
+	add('<widget name="badge" position="96,424" size="110,36" font="Regular;20" foregroundColor="%s" backgroundColor="%s" cornerRadius="8" halign="center" valign="center" zPosition="1" />' % (S.S_DARK, S.S_ACCENT))
+	add('<widget name="meta" position="222,420" size="1000,44" font="Regular;26" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK_QUIET, S.S_SHADE))
 	add('<widget name="title" position="96,470" size="1400,90" font="Regular;72" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_SHADE))
 	add('<widget name="start" position="96,574" size="84,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" zPosition="1" />' % (S.S_INK_QUIET, S.S_SHADE))
-	add('<widget name="track" position="186,586" size="%d,8" backgroundColor="#40ffffff" cornerRadius="4" zPosition="1" />' % PROGRESS_W)
+	add('<widget name="track" position="186,586" size="%d,8" backgroundColor="#b0ffffff" cornerRadius="4" zPosition="1" />' % PROGRESS_W)
 	add('<widget name="bar" position="186,586" size="0,8" backgroundColor="%s" cornerRadius="4" zPosition="2" />' % S.S_ACCENT)
 	add('<widget name="end" position="%d,574" size="84,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" zPosition="1" />' % (196 + PROGRESS_W, S.S_INK_QUIET, S.S_SHADE))
 	add('<widget name="left" position="%d,574" size="240,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" zPosition="1" />' % (290 + PROGRESS_W, S.S_INK, S.S_SHADE))
-	add('<eLabel text="NEXT" position="96,630" size="84,34" font="Regular;18" foregroundColor="%s" backgroundColor="#40ffffff" cornerRadius="8" halign="center" valign="center" zPosition="1" />' % S.S_INK_QUIET)
+	add('<eLabel text="NEXT" position="96,630" size="84,34" font="Regular;18" foregroundColor="%s" backgroundColor="#b0ffffff" cornerRadius="8" halign="center" valign="center" zPosition="1" />' % S.S_INK)
 	add('<widget name="next" position="196,626" size="1100,42" font="Regular;26" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_SHADE))
 	add('<widget name="plusOne" position="1240,618" size="584,56" font="Regular;24" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" halign="center" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_GLASS))
 	# Channel row.
@@ -71,7 +73,7 @@ def _skin():
 		add('<widget name="picon%d" position="%d,%d" size="210,100" scale="centerScaled" alphatest="blend" zPosition="3" />' % (i, x + 29, TILE_Y + 26))
 		add('<widget name="name%d" position="%d,%d" size="%d,%d" font="Regular;28" foregroundColor="%s" backgroundColor="%s" transparent="1" halign="center" valign="center" zPosition="3" />' % (i, x + 12, TILE_Y + 26, TILE_W - 24, 100, S.S_INK, S.S_CARD))
 		add('<widget name="number%d" position="%d,%d" size="80,28" font="Regular;18" foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="4" />' % (i, x + 14, TILE_Y + 8, S.S_INK_QUIET, S.S_CARD))
-		add('<widget name="tileTrack%d" position="%d,%d" size="%d,6" backgroundColor="#30ffffff" zPosition="3" />' % (i, x + 20, TILE_Y + TILE_H - 14, TILE_W - 40))
+		add('<widget name="tileTrack%d" position="%d,%d" size="%d,6" backgroundColor="#c8ffffff" zPosition="3" />' % (i, x + 20, TILE_Y + TILE_H - 14, TILE_W - 40))
 		add('<widget name="tileBar%d" position="%d,%d" size="0,6" backgroundColor="%s" zPosition="4" />' % (i, x + 20, TILE_Y + TILE_H - 14, S.S_INK))
 		add('<widget name="show%d" position="%d,%d" size="%d,32" font="Regular;22" foregroundColor="%s" backgroundColor="%s" transparent="1" noWrap="1" zPosition="1" />' % (i, x + 4, TILE_Y + TILE_H + 12, TILE_W - 8, S.S_INK, S.S_SHADE))
 		add('<widget name="later%d" position="%d,%d" size="%d,28" font="Regular;18" foregroundColor="%s" backgroundColor="%s" transparent="1" noWrap="1" zPosition="1" />' % (i, x + 4, TILE_Y + TILE_H + 46, TILE_W - 8, S.S_INK_QUIET, S.S_SHADE))
@@ -97,7 +99,7 @@ class HaloHome(Screen):
 
 		Chrome.addNavLabels(self)
 		self["navPill"] = Label("")
-		for name in ("meta", "title", "start", "track", "bar", "end", "left", "next", "plusOne", "hint", "ring"):
+		for name in ("badge", "meta", "title", "start", "track", "bar", "end", "left", "next", "plusOne", "hint", "ring"):
 			self[name] = Label("")
 		for i in range(TILES):
 			for name in ("tile", "name", "number", "tileTrack", "tileBar", "show", "later"):
@@ -214,6 +216,12 @@ class HaloHome(Screen):
 		current, later = self.nowNext(index)
 		number = Chrome.channelNumber(ref, index)
 		self["meta"].setText("%s · %s" % (number, name))
+		badge = self["badge"]
+		live = ref.toString() == self.playing
+		badge.setText(_("LIVE") if live else _("ON NOW"))
+		if badge.instance:
+			badge.instance.setBackgroundColor(BADGE_LIVE if live else BADGE_OTHER)
+			badge.instance.setForegroundColor(INK_DARK if live else INK)
 		now = time()
 		if current:
 			self["title"].setText(current["title"])
