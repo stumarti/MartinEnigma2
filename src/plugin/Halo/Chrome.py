@@ -88,3 +88,14 @@ def channelNumber(ref, index):
 	except Exception:
 		number = 0
 	return number if number and number > 0 else index + 1
+
+
+def piconFor(ref):
+	"""The channel logo (picon) file the box has for a service, or ''."""
+	from os.path import exists
+	try:
+		from Components.Renderer.Picon import getPiconName
+		path = getPiconName(ref.toString())
+	except Exception:
+		path = ""
+	return path if path and exists(path) else ""

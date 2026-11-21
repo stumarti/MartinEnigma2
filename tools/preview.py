@@ -268,6 +268,22 @@ def main():
 		events = e2.EPG[ref.toString()]
 		e2.EPG[ref.toString()] = [(eid, b, d, titles[(i * 3 + n) % len(titles)], "A short description of this programme from the EPG.", "Longer details about the episode, the presenters and what to expect.") for n, (eid, b, d, t, s, x) in enumerate(events)]
 
+	# Stand-in channel logos (the box uses its installed picons).
+	logoDir = os.path.join(args.out, "logos")
+	os.makedirs(logoDir, exist_ok=True)
+	palette = [(0, 94, 184), (203, 32, 39), (230, 0, 126), (0, 150, 136), (120, 40, 140), (255, 140, 0), (0, 70, 130), (90, 180, 60)]
+	for i, (ref, name) in enumerate(services[:8]):
+		logo = Image.new("RGBA", (220, 132), (0, 0, 0, 0))
+		draw = ImageDraw.Draw(logo)
+		draw.rounded_rectangle([8, 20, 212, 112], radius=18, fill=palette[i % len(palette)] + (255,))
+		label = "".join(word[0] for word in name.replace("+1", "").split())[:3]
+		fnt = font("Bold;48")
+		tw = draw.textlength(label, font=fnt)
+		draw.text(((220 - tw) / 2, 40), label, font=fnt, fill=(255, 255, 255, 255))
+		path = os.path.join(logoDir, "%d.png" % i)
+		logo.save(path)
+		e2.PICONS[ref.toString()] = path
+
 	made = []
 	home = openScreen(Home.HaloHome, services, 2, services[2][0].toString())
 	made.append(render(home, os.path.join(args.out, "home.png")))

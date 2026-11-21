@@ -736,6 +736,20 @@ class GuideTests(unittest.TestCase):
 			names = {w.get("name") for w in skin.findall("widget") if w.get("name")}
 			self.assertEqual(names, {name for name, component in screen.items() if isinstance(component, Label)}, type(screen).__name__)
 
+	def test_channel_column_shows_logos_when_the_box_has_them(self):
+		import tempfile
+		PICONS.clear()
+		with tempfile.NamedTemporaryFile(suffix=".png") as picon:
+			PICONS[self.services[1][0].toString()] = picon.name
+			guide = self.openGuide(start=0)
+			self.assertTrue(guide["logo1"].visible)
+			self.assertEqual(guide["logo1"].instance.pixmap, picon.name)
+			self.assertEqual(guide["logoName1"].text, "2")
+			self.assertEqual(guide["channel1"].text, "")
+		self.assertFalse(guide["logo0"].visible)
+		self.assertIn("Channel 1", guide["channel0"].text)
+		PICONS.clear()
+
 	def test_details_show_record_and_plus_one_chips(self):
 		services, now = makeServices(3, extraNames=["Channel 1 +1"])
 		self.services = services

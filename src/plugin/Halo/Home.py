@@ -11,7 +11,6 @@
 # A white ring slides between channel tiles and a white pill slides along the
 # menu bar; the dark menu text follows the pill.
 
-from os.path import exists
 from time import localtime, strftime, time
 
 from enigma import eSize, ePoint, eTimer, gRGB
@@ -141,14 +140,6 @@ class HaloHome(Screen):
 		self.cache[index] = (current, later)
 		return self.cache[index]
 
-	def piconFor(self, ref):
-		try:
-			from Components.Renderer.Picon import getPiconName
-			path = getPiconName(ref.toString())
-		except Exception:
-			path = ""
-		return path if path and exists(path) else ""
-
 	# ---------------------------------------------------------------- drawing
 
 	def start(self):
@@ -172,7 +163,7 @@ class HaloHome(Screen):
 			for part in ("tile", "number", "tileTrack", "show", "later"):
 				self["%s%d" % (part, slot)].show()
 			self["number%d" % slot].setText(str(Chrome.channelNumber(ref, index)))
-			picon = self.piconFor(ref)
+			picon = Chrome.piconFor(ref)
 			pixmap = self["picon%d" % slot]
 			if picon and pixmap.instance:
 				pixmap.instance.setPixmapFromFile(picon)

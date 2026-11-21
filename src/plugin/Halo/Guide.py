@@ -18,6 +18,7 @@ from enigma import eEPGCache, eServiceCenter, eServiceReference, eSize, ePoint
 
 from Components.ActionMap import ActionMap
 from Components.Label import Label
+from Components.Pixmap import Pixmap
 from Screens.Screen import Screen
 from ServiceReference import ServiceReference
 
@@ -41,6 +42,7 @@ WINDOW_MIN = 120       # minutes shown across the grid
 PAGE_MIN = 60          # how far left/right paging jumps
 PPM = GRID_W / float(WINDOW_MIN)  # pixels per minute
 DETAIL_X = 585
+LOGO_W = 110           # channel logo (picon) in the channel column
 
 
 def _hm(t):
@@ -82,6 +84,8 @@ def _skin():
 	for r in range(ROWS):
 		y = GRID_Y + r * ROW_PITCH
 		add('<widget name="channel%d" position="%d,%d" size="%d,%d" font="Regular;24" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" noWrap="1" zPosition="1" />' % (r, CHANNEL_X, y, CHANNEL_W, ROW_H, S.S_INK, S.S_CARD))
+		add('<widget name="logo%d" position="%d,%d" size="%d,%d" scale="centerScaled" alphatest="blend" zPosition="2" />' % (r, CHANNEL_X + 12, y + 10, LOGO_W, ROW_H - 20))
+		add('<widget name="logoName%d" position="%d,%d" size="%d,%d" font="Regular;22" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="2" />' % (r, CHANNEL_X + LOGO_W + 24, y, CHANNEL_W - LOGO_W - 36, ROW_H, S.S_INK_QUIET, S.S_CARD))
 		for c in range(CELLS_PER_ROW):
 			add('<widget name="cell%d_%d" position="%d,%d" size="10,%d" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" zPosition="1" />' % (r, c, GRID_X, y, ROW_H, S.S_INK, S.S_CARD))
 	add('<widget name="now" position="%d,%d" size="3,%d" backgroundColor="%s" zPosition="3" />' % (GRID_X, GRID_Y - 8, ROWS * ROW_PITCH - (ROW_PITCH - ROW_H) + 8, S.S_ACCENT))
@@ -149,6 +153,8 @@ class HaloGuide(Screen):
 			self["tick%d" % i] = Label("")
 		for r in range(ROWS):
 			self["channel%d" % r] = Label("")
+			self["logo%d" % r] = Pixmap()
+			self["logoName%d" % r] = Label("")
 			for c in range(CELLS_PER_ROW):
 				self["cell%d_%d" % (r, c)] = Label("")
 		self["hint"].setText(_("Left/right: programmes    Up/down: channels    CH+/-: page"))
@@ -235,13 +241,26 @@ class HaloGuide(Screen):
 			index = self.top + r
 			channel = self["channel%d" % r]
 			cells = [self["cell%d_%d" % (r, c)] for c in range(CELLS_PER_ROW)]
+			logo, logoName = self["logo%d" % r], self["logoName%d" % r]
 			if index >= len(self.services):
-				channel.hide()
-				for cell in cells:
-					cell.hide()
+				for widget in [channel, logo, logoName] + cells:
+					widget.hide()
 				continue
-			channel.setText("   %-4s %s" % (Chrome.channelNumber(self.services[index][0], index), self.services[index][1]))
+			ref, name = self.services[index]
+			number = Chrome.channelNumber(ref, index)
+			picon = Chrome.piconFor(ref)
 			channel.show()
+			if picon and logo.instance:
+				# Logo on the left, the channel number beside it.
+				logo.instance.setPixmapFromFile(picon)
+				logo.show()
+				logoName.setText(str(number))
+				logoName.show()
+				channel.setText("")
+			else:
+				logo.hide()
+				logoName.hide()
+				channel.setText("   %-4s %s" % (number, name))
 			events = self.events(index)
 			for c, cell in enumerate(cells):
 				if c >= len(events):
