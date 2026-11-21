@@ -11,9 +11,17 @@ on:
         description: "openATV image zip to start from (blank = newest 8.0 for the box)"
         required: false
         default: ""
+      release_tag:
+        description: "Publish as this release, e.g. v0.1.0-test1 (a '-' makes it a pre-release). Blank = build only."
+        required: false
+        default: ""
 
 permissions:
   contents: write
+
+env:
+  # The release to publish to: a pushed version tag, or the tag typed in for a manual run.
+  RELEASE_TAG: ${{ github.event.inputs.release_tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
 
 defaults:
   run:
@@ -52,12 +60,12 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Check the tag matches VERSION
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         run: |
           # v0.2.0 is a release; v0.2.0-anything (e.g. v0.2.0-test1) is a pre-release.
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${RELEASE_TAG#v}"
           test "${TAG_VERSION%%-*}" = "$(tr -d '[:space:]' < VERSION)" || {
-            echo "Tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+            echo "Tag $RELEASE_TAG does not match VERSION $(cat VERSION)"; exit 1; }
 
       - name: Build packages
         run: SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) python tools/build_ipk.py --repo "$GITHUB_REPOSITORY" --out out
@@ -68,17 +76,17 @@ jobs:
           path: out/
 
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" out/*.ipk out/SHA256SUMS --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" out/*.ipk out/SHA256SUMS --clobber
           else
             # Pre-releases (tags with a "-") are ignored by the box's updater.
-            PRE=""; case "$GITHUB_REF_NAME" in *-*) PRE="--prerelease" ;; esac
-            gh release create "$GITHUB_REF_NAME" out/*.ipk out/SHA256SUMS $PRE \
-              --title "Halo ${GITHUB_REF_NAME#v}" --generate-notes
+            PRE=""; case "$RELEASE_TAG" in *-*) PRE="--prerelease" ;; esac
+            gh release create "$RELEASE_TAG" out/*.ipk out/SHA256SUMS $PRE \
+              --target "$GITHUB_SHA" --title "Halo ${RELEASE_TAG#v}" --generate-notes
           fi
 
   image:
@@ -124,7 +132,7 @@ jobs:
           path: image-out/
 
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" image-out/* --clobber
+        run: gh release upload "$RELEASE_TAG" image-out/* --clobber
