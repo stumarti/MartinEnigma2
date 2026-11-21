@@ -149,7 +149,7 @@ class FakeEPGCache:
 
 	@staticmethod
 	def lookupEvent(query):
-		fields, (ref, _type, begin, minutes) = query[0], query[1]
+		ref, begin, minutes = query[1][0], query[1][2], query[1][3]
 		end = begin + minutes * 60
 		return [e for e in EPG.get(ref, []) if e[1] < end and e[1] + e[2] > begin]
 
