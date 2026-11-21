@@ -8,9 +8,10 @@ little on purpose:
 - updates itself from this repository's GitHub releases.
 
 > **Status: v0.1, not yet tested on a box.** The code is checked on a PC (unit
-> tests, a compile check of the engine, the patch applying to openATV 8.0), but
-> nothing here has run on real hardware yet. Test it in a spare multiboot slot,
-> never the slot you watch TV from.
+> tests, remastering a stand-in openATV image, a compile check of the engine,
+> the patch applying to openATV 8.0), but nothing here has run on real hardware
+> or against a real openATV image yet. Test it in a spare multiboot slot, never
+> the slot you watch TV from.
 
 ## What's in the repo
 
@@ -21,9 +22,12 @@ little on purpose:
 | `src/plugin/Halo/` | The Halo plugin (Python): top menu, channel, updater |
 | `src/skin/Halo/skin.xml` | The Halo skin: top menu and a slim infobar |
 | `tools/build_ipk.py` | Builds the plugin and skin packages on any PC |
-| `scripts/build-image.sh` | Builds the full image with OE-Alliance |
+| `tools/fetch_base_image.py` | Downloads the newest official openATV image for the box |
+| `tools/remaster.py` | Turns that image into a Halo image (adds Halo, removes extras) |
+| `image/remove.txt` | The extras removed from the openATV image |
+| `scripts/build-image.sh` | Builds the full image from source with OE-Alliance (needed for the C++ engine) |
 | `scripts/release-image.sh` | Uploads a built image to the GitHub release |
-| `.github/workflows/release.yml` | Tests, and publishes packages when you push a version tag |
+| `.github/workflows/release.yml` | Tests, then on a version tag publishes the packages and the image |
 | `tests/` | PC tests: update logic, packaging, menu behaviour against Enigma2 stand-ins |
 
 ## Try it first on stock openATV (no image build)
@@ -49,7 +53,35 @@ Then on the box:
    the item; BACK slides the menu away. **Settings** opens the normal Enigma2
    main menu, so nothing is out of reach.
 
-## Build the image
+## Build the image on GitHub
+
+A full Yocto build needs about 150 GB and many hours, more than GitHub's free
+build machines allow. So the GitHub build starts from openATV's official image
+for the H7S and changes only what Halo needs:
+
+1. download the newest openATV 8.0 "multi" image for `zgemmah7`,
+2. install the Halo plugin and skin into it,
+3. remove the extras in `image/remove.txt` (anything another package still
+   needs is kept, and the build log says why),
+4. pack it back up as `halo-image-<version>-zgemmah7.zip`, with the same
+   layout as the original, so USB flashing and Flash Image accept it.
+
+This takes a few minutes. It runs on every version tag, and you can run it by
+hand from the **Actions** tab ("Halo packages" → Run workflow), optionally with
+the URL of a specific openATV image to start from. The image is attached to the
+release, and a copy is kept as a workflow artifact.
+
+What's different from a full build: the kernel, drivers and Enigma2 are
+openATV's own, unchanged. That means **no C++ animation engine** in this image:
+the Halo menu animates from Python instead (same look, a bit less smooth). The
+engine needs the full build below.
+
+Before you make the repository public, note that the image contains openATV's
+binaries, including the box vendor's closed drivers, which you'd be
+redistributing. openATV publishes these images freely, but check you're happy
+with that; the updater needs the repository to be public to read its releases.
+
+## Build the image from source (for the C++ engine)
 
 On a Linux build PC (Ubuntu 24.04 or similar, with the packages listed in the
 [OE-Alliance build environment README](https://github.com/oe-alliance/build-enviroment),
@@ -57,17 +89,19 @@ about 150 GB free and several hours for the first build):
 
 ```sh
 HALO_GITHUB_REPO=YOUR-NAME/halo scripts/build-image.sh
+scripts/release-image.sh   # upload it to the GitHub release
 ```
 
 This clones the OE-Alliance build environment into `~/halo-build`, adds
-`meta-halo`, and runs `bitbake halo-image` for `MACHINE=zgemmah7`. The image
-lands in `out/halo-image-<version>-zgemmah7.zip`. Flash it into a free slot with
-openATV's Flash Manager (copy the zip to `/media/hdd/images/` first) or by USB.
+`meta-halo`, and runs `bitbake halo-image` for `MACHINE=zgemmah7`, with the
+animation engine patched into Enigma2. The image lands in
+`out/halo-image-<version>-zgemmah7.zip`. Upload it after the GitHub build so it
+replaces the remastered one on the release.
 
-The image contains only what's needed to boot, tune and show TV, plus the Halo
-plugin and skin, `ofgwrite` for flashing updates, FTP and telnet. The MetrixHD
-skin is kept as a fallback for now. To add something back, add its package to
-`IMAGE_INSTALL` in `meta-halo/recipes-halo/images/halo-image.bb`.
+The source-built image contains only what's needed to boot, tune and show TV,
+plus the Halo plugin and skin, `ofgwrite` for flashing updates, FTP and telnet.
+The MetrixHD skin is kept as a fallback for now. To add something back, add its
+package to `IMAGE_INSTALL` in `meta-halo/recipes-halo/images/halo-image.bb`.
 
 ## Releases and auto-update
 
@@ -77,10 +111,10 @@ skin is kept as a fallback for now. To add something back, add its package to
    `git tag v0.2.0 && git push origin main v0.2.0`.
 2. GitHub Actions runs the tests, builds the two `.ipk` packages and
    `SHA256SUMS`, and creates the release `v0.2.0` with them attached.
-3. Optional, for a new image: build it (above), then run
-   `scripts/release-image.sh`. It uploads
-   `halo-image-0.2.0-zgemmah7.zip` and its `.sha256` to the same release (needs
-   the GitHub CLI, logged in).
+3. The same workflow then builds `halo-image-0.2.0-zgemmah7.zip` from the
+   openATV image and attaches it, with its `.sha256`, to the release.
+4. Optional: to ship the C++ engine instead, build from source (above) and run
+   `scripts/release-image.sh`, which replaces the image on the release.
 
 **What the box does**
 

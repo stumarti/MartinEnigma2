@@ -1,0 +1,32 @@
+# Packages removed from the openATV base image to make Halo minimal.
+# One package per line. Anything still needed by another installed package
+# is kept automatically (the build log says which and why), and names that
+# aren't installed are skipped. Delete a line to keep that package.
+
+# openATV's "everything" meta-packages. They hold no files, only the list
+# of extras below, so removing them is what lets the extras go.
+packagegroup-oea-distro-openatv
+packagegroup-oea-enigma2-plugins
+packagegroup-oea-enigma2-core
+
+# Extras Halo doesn't use
+enigma2-plugin-extensions-atilehd
+enigma2-plugin-extensions-autotimer
+enigma2-plugin-extensions-crashreporter
+enigma2-plugin-extensions-cutlisteditor
+enigma2-plugin-extensions-dvdplayer
+enigma2-plugin-extensions-enhancedmoviecenter
+enigma2-plugin-extensions-epgsearch
+enigma2-plugin-extensions-filecommander
+enigma2-plugin-extensions-imdb
+enigma2-plugin-extensions-mediascanner
+enigma2-plugin-extensions-openwebif-themes
+enigma2-plugin-extensions-piconbrowser
+enigma2-plugin-extensions-pictureplayer
+enigma2-plugin-extensions-programmlistenupdater
+dhrystone
+streambench
+flip
+hddtemp
+rtmpdump
+unrar

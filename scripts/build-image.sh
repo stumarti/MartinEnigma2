@@ -45,10 +45,9 @@ cd "$BUILD_DIR"
 bitbake halo-image
 
 DEPLOY="$BUILD_DIR/tmp/deploy/glibc/images"
-IMAGE_ZIP="$(find "$DEPLOY" -name "halo-*${MACHINE}*.zip" -newer "$HALO_ROOT/VERSION" -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)"
-if [ -z "$IMAGE_ZIP" ]; then
-	IMAGE_ZIP="$(find "$DEPLOY" -name "*.zip" -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)"
-fi
+# The flashable zip is the "_multi" one (kernel.bin + rootfs.tar.bz2).
+IMAGE_ZIP="$(find "$DEPLOY" -name "halo-*_multi.zip" -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)"
+[ -n "$IMAGE_ZIP" ] || { echo "No *_multi.zip found under $DEPLOY" >&2; exit 1; }
 OUT="$HALO_ROOT/out/halo-image-$VERSION-$MACHINE.zip"
 mkdir -p "$HALO_ROOT/out"
 cp "$IMAGE_ZIP" "$OUT"
