@@ -37,7 +37,7 @@ animates from Python instead of C++, which is a little less smooth but looks
 the same.
 
 ```sh
-python3 tools/build_ipk.py --repo YOUR-NAME/halo
+python3 tools/build_ipk.py --repo stumarti/MartinEnigma2
 scp out/*.ipk root@BOX-IP:/tmp/
 ssh root@BOX-IP 'opkg install /tmp/enigma2-plugin-*-halo_*.ipk && init 4 && init 3'
 ```
@@ -88,7 +88,7 @@ On a Linux build PC (Ubuntu 24.04 or similar, with the packages listed in the
 about 150 GB free and several hours for the first build):
 
 ```sh
-HALO_GITHUB_REPO=YOUR-NAME/halo scripts/build-image.sh
+HALO_GITHUB_REPO=stumarti/MartinEnigma2 scripts/build-image.sh
 scripts/release-image.sh   # upload it to the GitHub release
 ```
 

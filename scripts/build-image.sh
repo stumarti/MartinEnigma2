@@ -14,7 +14,7 @@ WORK="${HALO_WORK:-$HOME/halo-build}"
 MACHINE="${MACHINE:-zgemmah7}"
 OEA_BRANCH="${OEA_BRANCH:-6.0}"
 HALO_GITHUB_REPO="${HALO_GITHUB_REPO:-$(git -C "$HALO_ROOT" config --get remote.origin.url 2>/dev/null | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##' || true)}"
-HALO_GITHUB_REPO="${HALO_GITHUB_REPO:-OWNER/halo}"
+HALO_GITHUB_REPO="${HALO_GITHUB_REPO:-stumarti/MartinEnigma2}"
 VERSION="$(tr -d '[:space:]' < "$HALO_ROOT/VERSION")"
 
 echo "Halo $VERSION for $MACHINE (releases from $HALO_GITHUB_REPO)"
