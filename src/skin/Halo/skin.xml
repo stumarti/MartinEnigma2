@@ -36,22 +36,6 @@
 		<font filename="LiberationSans-Bold.ttf" name="Bold" scale="100" />
 	</fonts>
 
-	<!-- Top menu: keep geometry in step with TopMenu.py. -->
-	<screen name="HaloTopMenu" position="0,0" size="1920,180" flags="wfNoBorder" backgroundColor="haloClear">
-		<eLabel name="panel" position="96,32" size="1728,112" backgroundColor="haloGlass" cornerRadius="56" zPosition="0" />
-		<widget name="brand" position="136,32" size="190,112" font="Bold;34" foregroundColor="haloInk" backgroundColor="haloGlass" transparent="1" valign="center" zPosition="2" />
-		<widget name="focus" position="360,52" size="200,72" backgroundColor="haloInk" cornerRadius="36" zPosition="1" />
-		<widget name="item0" position="360,52" size="200,72" font="Regular;28" halign="center" valign="center" transparent="1" zPosition="2" />
-		<widget name="item1" position="576,52" size="200,72" font="Regular;28" halign="center" valign="center" transparent="1" zPosition="2" />
-		<widget name="item2" position="792,52" size="200,72" font="Regular;28" halign="center" valign="center" transparent="1" zPosition="2" />
-		<widget name="item3" position="1008,52" size="200,72" font="Regular;28" halign="center" valign="center" transparent="1" zPosition="2" />
-		<widget name="item4" position="1224,52" size="200,72" font="Regular;28" halign="center" valign="center" transparent="1" zPosition="2" />
-		<widget name="item5" position="1440,52" size="200,72" font="Regular;28" halign="center" valign="center" transparent="1" zPosition="2" />
-		<widget source="global.CurrentTime" render="Label" position="1660,32" size="124,112" font="Regular;30" foregroundColor="haloInk" backgroundColor="haloGlass" transparent="1" halign="right" valign="center" zPosition="2">
-			<convert type="ClockToText">Format:%H:%M</convert>
-		</widget>
-	</screen>
-
 	<!-- Slim infobar: channel, now and next, progress. -->
 	<screen name="InfoBar" position="0,0" size="1920,1080" flags="wfNoBorder" backgroundColor="haloClear">
 		<eLabel name="panel" position="96,856" size="1728,168" backgroundColor="haloGlass" cornerRadius="32" zPosition="0" />

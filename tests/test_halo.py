@@ -152,18 +152,10 @@ class SourceTests(unittest.TestCase):
 				with open(os.path.join(PLUGIN, name)) as f:
 					ast.parse(f.read(), name)
 
-	def test_skin_is_well_formed_and_matches_the_menu_code(self):
+	def test_skin_is_well_formed(self):
 		import xml.etree.ElementTree as ET
 		skin = ET.parse(os.path.join(ROOT, "src", "skin", "Halo", "skin.xml")).getroot()
-		menu = skin.find("screen[@name='HaloTopMenu']")
-		self.assertIsNotNone(menu)
-		widgets = {w.get("name"): w for w in menu.findall("widget") if w.get("name")}
-		for name in ["brand", "focus"] + ["item%d" % i for i in range(6)]:
-			self.assertIn(name, widgets)
-		# TopMenu.py places items at ITEM_X0 + i * ITEM_STEP.
-		for i in range(6):
-			self.assertEqual(widgets["item%d" % i].get("position"), "%d,52" % (360 + i * 216))
-
+		self.assertEqual(skin.find("output/resolution").get("xres"), "1920")
 
 	def test_epg_skin_uses_only_widgets_openatv_provides(self):
 		import xml.etree.ElementTree as ET

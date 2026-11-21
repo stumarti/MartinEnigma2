@@ -100,6 +100,9 @@ class FakeWidget:
 	def resize(self, size):
 		self.size = (size.width(), size.height())
 
+	def setPixmapFromFile(self, path):
+		self.pixmap = path
+
 	def invalidate(self):
 		pass
 
@@ -204,7 +207,7 @@ class Screen(dict):
 		for i in range(6):
 			positions["item%d" % i] = (360 + i * 216, 52)
 		for name, component in self.items():
-			if isinstance(component, Label) and component.instance is None:
+			if isinstance(component, Label) and component.instance is None:  # Pixmap is a Label here
 				component.instance = widgetClass(*positions.get(name, (0, 0)))
 		for fn in self.onLayoutFinish:
 			fn()
@@ -226,7 +229,14 @@ class ConfigSubsection:
 config = types.SimpleNamespace(plugins=types.SimpleNamespace(), tv=types.SimpleNamespace(lastservice=ConfigItem("")))
 NOTIFICATIONS = []
 module("Components.ActionMap", ActionMap=ActionMap)
+class Pixmap(Label):
+	pass
+
+
+PICONS = {}  # ref string -> picon path
 module("Components.Label", Label=Label)
+module("Components.Pixmap", Pixmap=Pixmap)
+module("Components.Renderer.Picon", getPiconName=lambda ref: PICONS.get(ref, ""))
 module("Components.config", config=config, ConfigSubsection=ConfigSubsection, ConfigText=ConfigItem, ConfigInteger=ConfigItem, ConfigSelection=ConfigItem, ConfigYesNo=ConfigItem, getConfigListEntry=lambda *a: a)
 module("Components.SystemInfo", BoxInfo=types.SimpleNamespace(getItem=lambda key: {"machinebuild": "zgemmah7", "BoxName": "zgemmah7", "model": "h7"}.get(key)))
 module("Components.ConfigList", ConfigListScreen=object)
@@ -310,7 +320,7 @@ module("twisted.internet.threads", deferToThread=lambda fn, *a: Deferred(fn, *a)
 
 sys.path.insert(0, PLUGINS)
 from Halo import Animator, plugin, updatecore  # noqa: E402
-from Halo import Guide, TopMenu, Updater  # noqa: E402
+from Halo import Chrome, Guide, Home, Updater  # noqa: E402
 
 Animator.monotonic = lambda: CLOCK[0]
 
@@ -366,63 +376,139 @@ class AnimatorTests(unittest.TestCase):
 		self.assertGreater(max(Animator.ease(Animator.EASE_OUT_BACK, t / 100) for t in range(100)), 1.0)
 
 
-class TopMenuTests(unittest.TestCase):
-	def openMenu(self, widgetClass=FakeWidget):
-		menu = TopMenu.HaloTopMenu(Session())
-		menu.layout(widgetClass)
-		return menu
+def makeServices(count, extraNames=()):
+	"""Fake channels with programmes every 30 or 45 minutes around now."""
+	import time as _time
+	now = _time.time()
+	half = now - now % 1800
+	EPG.clear()
+	services = []
+	names = ["Channel %d" % (i + 1) for i in range(count)] + list(extraNames)
+	for i, name in enumerate(names):
+		ref = "1:0:1:%X:0:0:0:0:0:0:" % (i + 1)
+		services.append((FakeRef(ref), name))
+		length = 1800 if i % 2 == 0 else 2700
+		events, begin, n = [], half - 3 * 3600, 0
+		while begin < half + 6 * 3600:
+			events.append((1000 * i + n, begin, length, "Show %d-%d" % (i, n), "short %d" % n, "long text %d" % n))
+			begin += length
+			n += 1
+		EPG[ref] = events
+	return services, now
 
-	def test_slides_in_moves_focus_and_returns_choice(self):
-		menu = self.openMenu()
-		self.assertEqual(menu.instance.pos, (0, -180))
+
+class HomeTests(unittest.TestCase):
+	def setUp(self):
+		self.services, self.now = makeServices(10)
+		PICONS.clear()
+
+	def openHome(self, start=3, widgetClass=FakeWidget):
+		home = Home.HaloHome(Session(), self.services, start, self.services[start][0].toString())
+		home.layout(widgetClass)
 		advance(0.4)
-		self.assertEqual(menu.instance.pos, (0, 0))
-		menu["actions"].actions["right"]()
+		return home
+
+	def ringSlot(self, home):
+		x = home["ring"].instance.pos[0] + Home.RING
+		return (x - Home.TILE_X0) / float(Home.TILE_STEP)
+
+	def test_opens_on_the_channel_being_watched(self):
+		home = self.openHome(start=3)
+		self.assertEqual(home.instance.pos, (0, 0))
+		self.assertEqual(home.focus, 3)
+		self.assertEqual(home.first, 2)
+		self.assertEqual(self.ringSlot(home), 1)
+		self.assertIn("Channel 4", home["meta"].text)
+		self.assertTrue(home["title"].text.startswith("Show 3-"))
+		self.assertIn("min left", home["left"].text)
+		self.assertTrue(home["next"].text)
+
+	def test_tiles_show_picons_or_names(self):
+		import tempfile
+		with tempfile.NamedTemporaryFile(suffix=".png") as picon:
+			PICONS[self.services[3][0].toString()] = picon.name
+			home = self.openHome(start=3)
+			self.assertTrue(home["picon1"].visible)
+			self.assertEqual(home["picon1"].instance.pixmap, picon.name)
+			self.assertFalse(home["name1"].visible)
+		self.assertFalse(home["picon0"].visible)
+		self.assertEqual(home["name0"].text, "Channel 3")
+		self.assertEqual(home["number0"].text, "3")
+		self.assertTrue(home["show0"].text.startswith("Show 2-"))
+
+	def test_ring_slides_then_the_row_scrolls(self):
+		home = self.openHome(start=3)
+		for _ in range(3):
+			home["actions"].actions["right"]()
 		advance(0.3)
-		menu["actions"].actions["right"]()
-		advance(0.06)  # mid-slide: the dark text follows the pill (at most a frame behind)
-		dark = [i for i in range(6) if menu["item%d" % i].instance.colour == TopMenu.INK_ON_FOCUS]
+		self.assertEqual(home.focus, 6)
+		self.assertEqual(self.ringSlot(home), 4)
+		home["actions"].actions["right"]()
+		home["actions"].actions["right"]()  # past the last tile: the row moves
+		advance(0.3)
+		self.assertEqual(home.focus, 8)
+		self.assertEqual(home.first, 3)
+		self.assertEqual(self.ringSlot(home), 5)
+		self.assertEqual(home["name5"].text, "Channel 9")
+		self.assertIn("Channel 9", home["meta"].text)
+
+	def test_wraps_from_the_last_channel_to_the_first(self):
+		home = self.openHome(start=9)
+		home["actions"].actions["right"]()
+		advance(0.3)
+		self.assertEqual((home.focus, home.first), (0, 0))
+		self.assertEqual(self.ringSlot(home), 0)
+
+	def test_ok_watches_the_chosen_channel(self):
+		home = self.openHome(start=3)
+		home["actions"].actions["left"]()
+		home["actions"].actions["ok"]()
+		advance(0.3)
+		self.assertEqual(home.closed[0], "watch")
+		self.assertEqual(home.closed[1].toString(), self.services[2][0].toString())
+
+	def test_menu_bar_pill_slides_and_text_follows(self):
+		home = self.openHome()
+		home["actions"].actions["up"]()
+		home["actions"].actions["right"]()
+		home["actions"].actions["right"]()
+		advance(0.06)
+		dark = [i for i in range(6) if home["nav%d" % i].instance.colour == Chrome.INK_DARK]
 		self.assertEqual(len(dark), 1)
-		pillIndex = (menu["focus"].instance.pos[0] - 360) / 216.0
-		self.assertLessEqual(abs(dark[0] - pillIndex), 1.0)
 		advance(0.3)
-		self.assertEqual(menu["focus"].instance.pos, (360 + 2 * 216, 52))
-		self.assertEqual(menu["item2"].instance.colour, TopMenu.INK_ON_FOCUS)
-		self.assertEqual(menu["item0"].instance.colour, TopMenu.INK)
-		menu["actions"].actions["ok"]()
-		self.assertEqual(menu.closed, "not closed")  # waits for the slide out
+		self.assertEqual(home["navPill"].instance.pos, (Chrome.navX(2), Chrome.NAV_Y))
+		self.assertEqual(home["nav2"].instance.colour, Chrome.INK_DARK)
+		home["actions"].actions["ok"]()
 		advance(0.3)
-		self.assertEqual(menu.instance.pos, (0, -180))
-		self.assertEqual(menu.closed, "recordings")
+		self.assertEqual(home.closed, ("menu", "recordings"))
 
-	def test_wrapping_left_sweeps_the_highlight_across(self):
-		menu = self.openMenu()
-		advance(0.4)
-		seen = set()
-		menu["actions"].actions["left"]()  # 0 -> 5: the pill travels the whole row
-		for _ in range(15):
-			advance(0.016)
-			seen.add(menu.painted)
-		self.assertEqual(menu.painted, 5)
-		self.assertGreaterEqual(len(seen), 3)
+	def test_down_returns_to_the_channel_row(self):
+		home = self.openHome()
+		home["actions"].actions["up"]()
+		home["actions"].actions["right"]()
+		home["actions"].actions["down"]()
+		advance(0.3)
+		self.assertEqual(home.zone, "channels")
+		self.assertEqual(home["navPill"].instance.pos[0], Chrome.navX(0))
+		home["actions"].actions["right"]()
+		self.assertEqual(home.focus, 4)
 
-	def test_left_wraps_and_back_closes_with_no_choice(self):
-		menu = self.openMenu()
-		menu["actions"].actions["left"]()
-		advance(0.3)
-		self.assertEqual(menu.index, 5)
-		menu["actions"].actions["cancel"]()
-		menu["actions"].actions["ok"]()  # ignored while closing
-		advance(0.3)
-		self.assertIsNone(menu.closed)
+	def test_plus_one_prompt_when_the_start_was_missed(self):
+		services, now = makeServices(4, extraNames=["Channel 1 +1"])
+		self.services = services
+		home = self.openHome(start=0)
+		current = home.nowNext(0)[0]
+		missed = now - current["begin"] > 300
+		self.assertEqual(home["plusOne"].visible, missed)
+		if missed:
+			self.assertIn("Channel 1 +1", home["plusOne"].text)
+		home["actions"].actions["right"]()
+		self.assertFalse(home["plusOne"].visible)  # no +1 for Channel 2
 
 	def test_works_with_the_native_engine(self):
-		menu = self.openMenu(NativeWidget)
-		menu["actions"].actions["right"]()
-		self.assertEqual(menu["focus"].instance.native[2], 360 + 216)
-		menu["actions"].actions["ok"]()
-		advance(0.3)
-		self.assertEqual(menu.closed, "guide")
+		home = self.openHome(widgetClass=NativeWidget)
+		home["actions"].actions["right"]()
+		self.assertEqual(home["ring"].instance.native[2], Home.TILE_X0 + 2 * Home.TILE_STEP - Home.RING)
 
 
 class PluginTests(unittest.TestCase):
@@ -437,10 +523,10 @@ class PluginTests(unittest.TestCase):
 		infobar = InfoBarMenu()
 		infobar.session = session
 		infobar.showMainMenu()
-		self.assertIs(session.opened[-1][0], TopMenu.HaloTopMenu)
-		session.lastCallback("settings")
+		self.assertIs(session.opened[-1][0], Home.HaloHome)
+		session.lastCallback(("menu", "settings"))
 		self.assertTrue(infobar.openedMainMenu)
-		session.lastCallback("apps")
+		session.lastCallback(("menu", "apps"))
 		self.assertEqual(session.opened[-1], ("PluginBrowser",))
 		config.plugins.halo.service.value = ""
 
@@ -509,21 +595,7 @@ class UpdaterTests(unittest.TestCase):
 
 class GuideTests(unittest.TestCase):
 	def setUp(self):
-		import time as _time
-		self.now = _time.time()
-		half = self.now - self.now % 1800
-		EPG.clear()
-		self.services = []
-		for i in range(8):
-			ref = "1:0:1:%X:0:0:0:0:0:0:" % (i + 1)
-			self.services.append((FakeRef(ref), "Channel %d" % (i + 1)))
-			length = 1800 if i % 2 == 0 else 2700  # 30 or 45 minute programmes
-			events, begin, n = [], half - 3 * 3600, 0
-			while begin < half + 6 * 3600:
-				events.append((1000 * i + n, begin, length, "Show %d-%d" % (i, n), "short %d" % n, "long text %d" % n))
-				begin += length
-				n += 1
-			EPG[ref] = events
+		self.services, self.now = makeServices(8)
 		self.timers = FakeRecordTimers()
 
 	def openGuide(self, start=0):
@@ -581,12 +653,12 @@ class GuideTests(unittest.TestCase):
 			guide["actions"].actions["down"]()
 			advance(0.2)
 		self.assertEqual(guide.top + guide.row, 7)
-		self.assertEqual(guide.top, 2)
-		self.assertEqual(guide["channel5"].text.strip(), "Channel 8")
+		self.assertEqual(guide.top, 3)
+		self.assertTrue(guide["channel4"].text.strip().endswith("Channel 8"))
 		guide["actions"].actions["down"]()  # already at the last channel
 		self.assertEqual(guide.top + guide.row, 7)
 		guide["actions"].actions["prevBouquet"]()
-		self.assertEqual(guide.top + guide.row, 1)
+		self.assertEqual(guide.top + guide.row, 2)
 
 	def test_selection_keeps_its_time_when_changing_channel(self):
 		guide = self.openGuide(start=0)
@@ -627,7 +699,7 @@ class GuideTests(unittest.TestCase):
 		guide["actions"].actions["ok"]()
 		self.assertEqual(guide.closed, "not closed")
 		advance(0.3)
-		self.assertEqual(guide.instance.pos, (0, 1080))
+		self.assertEqual(guide.instance.pos, (0, 140))
 		self.assertEqual(guide.closed.toString(), self.services[3][0].toString())
 
 	def test_channel_without_epg_shows_a_message(self):
@@ -657,10 +729,23 @@ class GuideTests(unittest.TestCase):
 
 	def test_skin_names_every_widget(self):
 		import xml.etree.ElementTree as ET
-		skin = ET.fromstring(Guide.HaloGuide.skin)
-		names = {w.get("name") for w in skin.findall("widget") if w.get("name")}
-		guide = Guide.HaloGuide(Session(), self.services, 0, self.timers)
-		self.assertEqual(names, {name for name, component in guide.items() if isinstance(component, Label)})
+		for screen in (Guide.HaloGuide(Session(), self.services, 0, self.timers), Home.HaloHome(Session(), self.services, 0)):
+			skin = ET.fromstring(type(screen).skin)
+			names = {w.get("name") for w in skin.findall("widget") if w.get("name")}
+			self.assertEqual(names, {name for name, component in screen.items() if isinstance(component, Label)}, type(screen).__name__)
+
+	def test_details_show_record_and_plus_one_chips(self):
+		services, now = makeServices(3, extraNames=["Channel 1 +1"])
+		self.services = services
+		guide = self.openGuide(start=0)
+		self.assertIn("Record", guide["chipRecord"].text)
+		self.assertIn("Channel 1 +1", guide["chipPlus"].text)
+		self.assertTrue(guide["meta"].text.startswith("1 · Channel 1 · "))
+		self.assertIn("\n", guide["focus"].text)  # title and times
+		guide["actions"].actions["green"]()
+		self.assertIn("Recording set", guide["chipRecord"].text)
+		guide["actions"].actions["down"]()
+		self.assertFalse(guide["chipPlus"].visible)
 
 
 if __name__ == "__main__":

@@ -89,6 +89,11 @@ def makeBaseImage(folder):
 	return zipPath
 
 
+def readVersion():
+	with open(os.path.join(ROOT, "VERSION")) as f:
+		return f.read().strip()
+
+
 class RemasterTests(unittest.TestCase):
 	def setUp(self):
 		self.tmp = tempfile.mkdtemp()
@@ -141,7 +146,7 @@ class RemasterTests(unittest.TestCase):
 		with open(os.path.join(rootfs, "etc/halo-image-version")) as f:
 			self.assertEqual(f.read().strip(), "0.2.0")
 		with open(os.path.join(rootfs, "etc/halo-version")) as f:
-			self.assertEqual(f.read().strip(), open(os.path.join(ROOT, "VERSION")).read().strip())
+			self.assertEqual(f.read().strip(), readVersion())
 
 	def test_status_file_round_trips(self):
 		stanzas = remaster.parseStanzas(STATUS)

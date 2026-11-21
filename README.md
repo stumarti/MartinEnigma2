@@ -49,9 +49,11 @@ Then on the box:
    automatically; on a Halo image it is.
 2. Tune to the channel you want, open **Plugins → Halo** and press **yellow**
    ("Use this channel").
-3. Press **MENU** on live TV. Left and right move the white focus pill; OK opens
-   the item; BACK slides the menu away. **Settings** opens the normal Enigma2
-   main menu, so nothing is out of reach.
+3. Press **MENU** on live TV to open **Halo Home**: the menu bar at the top,
+   what's on in the middle and a row of channel tiles (with picons, if you have
+   a picon set installed) along the bottom. Left and right slide the white ring
+   between channels, OK watches, up moves to the menu bar. **Settings** opens
+   the normal Enigma2 main menu, so nothing is out of reach.
 4. **TV Guide** (in the menu, or the remote's **EPG** button) opens the Halo
    guide: left/right move between programmes, up/down between channels,
    CH+/CH− a page of channels, OK watches, green records. To get openATV's own

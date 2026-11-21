@@ -1,8 +1,8 @@
 # Halo plugin entry point.
 #
 # At session start Halo:
-#   1. makes MENU open the animated Halo top menu (its Settings item opens
-#      the normal Enigma2 main menu),
+#   1. makes MENU open Halo Home: the menu bar, what's on and a channel row
+#      (its Settings item opens the normal Enigma2 main menu),
 #   2. makes the EPG button open the Halo TV Guide (switchable in settings),
 #   3. tunes the Halo channel, if one is set,
 #   4. starts the GitHub release updater.
@@ -29,8 +29,9 @@ tuneTimer = None
 
 
 def openTopMenu(infobar):
-	from .TopMenu import HaloTopMenu
-	infobar.session.openWithCallback(lambda choice: menuChosen(infobar, choice), HaloTopMenu)
+	"""MENU opens Halo Home: live TV with the menu bar and the channel row."""
+	from .Home import openHome
+	openHome(infobar.session, infobar, menuChosen)
 
 
 def menuChosen(infobar, choice):

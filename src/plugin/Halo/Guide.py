@@ -14,72 +14,78 @@
 
 from time import localtime, strftime, time
 
-from enigma import eEPGCache, eServiceCenter, eServiceReference, eSize, ePoint, gRGB
+from enigma import eEPGCache, eServiceCenter, eServiceReference, eSize, ePoint
 
 from Components.ActionMap import ActionMap
 from Components.Label import Label
 from Screens.Screen import Screen
 from ServiceReference import ServiceReference
 
+from . import Chrome
 from .Animator import EASE_OUT_CUBIC, Animator
+from .Chrome import CARD, CARD_NOW, CARD_PAST, INK, INK_PAST, RECORD
 
-# Layout (1080p).
+# Layout (1080p), matching the Halo TV Guide design.
 SCREEN_W, SCREEN_H = 1920, 1080
-GRID_X = 392           # left edge of the time grid
-GRID_W = 1432          # width of the time grid
-CHANNEL_X, CHANNEL_W = 96, 280
-GRID_Y = 476
-ROWS = 6
-ROW_H = 76
-ROW_PITCH = 84
-CELL_GAP = 6
+CHANNEL_X, CHANNEL_W = 96, 288
+GRID_X = 396           # left edge of the time grid
+GRID_W = 1428          # width of the time grid
+RULER_Y = 506
+GRID_Y = 556
+ROWS = 5
+ROW_H = 80
+ROW_PITCH = 90
+CELL_GAP = 8
 CELLS_PER_ROW = 12
 WINDOW_MIN = 120       # minutes shown across the grid
 PAGE_MIN = 60          # how far left/right paging jumps
 PPM = GRID_W / float(WINDOW_MIN)  # pixels per minute
-RULER_Y = 430
-
-# Colours: alpha first, 00 = opaque.
-INK = gRGB(0x00F4F6FA)
-INK_QUIET = gRGB(0x00AEB6C4)
-INK_PAST = gRGB(0x006F7889)
-INK_DARK = gRGB(0x0007090C)
-CARD = gRGB(0x00141922)
-CARD_NOW = gRGB(0x00232A35)
-CARD_PAST = gRGB(0x000E1117)
-RECORD = gRGB(0x00E5484D)
+DETAIL_X = 585
 
 
 def _hm(t):
 	return strftime("%H:%M", localtime(t))
 
 
+def _day(t):
+	today = localtime(time())
+	when = localtime(t)
+	if when.tm_yday == today.tm_yday and when.tm_year == today.tm_year:
+		return _("Today")
+	return strftime("%a %d", when)
+
+
 def _skin():
 	"""The screen skin. Cells are a fixed pool of labels placed by code."""
-	parts = ['<screen name="HaloGuide" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="#00090b10" resolution="1920,1080">' % (SCREEN_W, SCREEN_H)]
+	S = Chrome
+	parts = ['<screen name="HaloGuide" position="0,0" size="%d,%d" flags="wfNoBorder" backgroundColor="%s" resolution="1920,1080">' % (SCREEN_W, SCREEN_H, S.S_GROUND)]
 	add = parts.append
-	add('<eLabel text="TV Guide" position="96,44" size="420,64" font="Regular;44" foregroundColor="#00f4f6fa" backgroundColor="#00090b10" valign="center" />')
-	add('<widget name="bouquet" position="520,44" size="1040,64" font="Regular;28" foregroundColor="#00aeb6c4" backgroundColor="#00090b10" valign="center" noWrap="1" />')
-	add('<widget source="global.CurrentTime" render="Label" position="1600,44" size="224,64" font="Regular;32" foregroundColor="#00f4f6fa" backgroundColor="#00090b10" halign="right" valign="center"><convert type="ClockToText">Format:%H:%M</convert></widget>')
-	# Detail card.
-	add('<eLabel position="96,132" size="1728,272" backgroundColor="#00141922" cornerRadius="28" zPosition="0" />')
-	add('<widget name="when" position="136,154" size="1648,36" font="Regular;26" foregroundColor="#00aeb6c4" backgroundColor="#00141922" transparent="1" noWrap="1" zPosition="1" />')
-	add('<widget name="title" position="136,194" size="1648,64" font="Regular;46" foregroundColor="#00f4f6fa" backgroundColor="#00141922" transparent="1" noWrap="1" zPosition="1" />')
-	add('<widget name="description" position="136,264" size="1648,100" font="Regular;26" foregroundColor="#00aeb6c4" backgroundColor="#00141922" transparent="1" zPosition="1" />')
-	add('<widget name="progressTrack" position="136,378" size="1648,6" backgroundColor="#00232a35" cornerRadius="3" zPosition="1" />')
-	add('<widget name="progress" position="136,378" size="0,6" backgroundColor="#005b9bff" cornerRadius="3" zPosition="2" />')
+	parts.extend(Chrome.headerSkin(S.S_GROUND, 1))
+	# Filter row: the day shown and the bouquet.
+	add('<widget name="day" position="96,150" size="170,48" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="24" halign="center" valign="center" zPosition="1" />' % (S.S_DARK, S.S_INK))
+	add('<widget name="bouquet" position="278,150" size="520,48" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="24" halign="center" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK_QUIET, S.S_CARD))
+	add('<widget name="hint" position="924,150" size="900,48" font="Regular;22" foregroundColor="%s" backgroundColor="%s" halign="right" valign="center" zPosition="1" />' % (S.S_INK_PAST, S.S_GROUND))
+	# Selected programme: live picture on the left, details on the right.
+	add('<eLabel position="96,222" size="441,248" backgroundColor="%s" cornerRadius="20" zPosition="0" />' % S.S_CARD)
+	add('<widget source="session.VideoPicture" render="Pig" position="96,222" size="441,248" backgroundColor="%s" zPosition="1" />' % S.S_CLEAR)
+	add('<widget name="live" position="114,238" size="170,34" font="Regular;18" foregroundColor="%s" backgroundColor="%s" cornerRadius="8" halign="center" valign="center" zPosition="2" />' % (S.S_DARK, S.S_INK))
+	add('<widget name="meta" position="%d,232" size="1239,36" font="Regular;24" foregroundColor="%s" backgroundColor="%s" valign="center" noWrap="1" zPosition="1" />' % (DETAIL_X, S.S_INK_QUIET, S.S_GROUND))
+	add('<widget name="title" position="%d,272" size="1239,64" font="Regular;48" foregroundColor="%s" backgroundColor="%s" valign="center" noWrap="1" zPosition="1" />' % (DETAIL_X, S.S_INK, S.S_GROUND))
+	add('<widget name="description" position="%d,342" size="1239,66" font="Regular;22" foregroundColor="%s" backgroundColor="%s" zPosition="1" />' % (DETAIL_X, S.S_INK_QUIET, S.S_GROUND))
+	add('<widget name="chipRecord" position="%d,418" size="240,52" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" halign="center" valign="center" zPosition="1" />' % (DETAIL_X, S.S_DARK, S.S_INK))
+	add('<widget name="chipWatch" position="%d,418" size="200,52" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" halign="center" valign="center" zPosition="1" />' % (DETAIL_X + 254, S.S_INK, S.S_CARD_NOW))
+	add('<widget name="chipPlus" position="%d,418" size="460,52" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" halign="center" valign="center" noWrap="1" zPosition="1" />' % (DETAIL_X + 468, S.S_INK, S.S_CARD_NOW))
 	# Time ruler.
 	for i in range(WINDOW_MIN // 30):
-		add('<widget name="tick%d" position="%d,%d" size="200,36" font="Regular;24" foregroundColor="#00aeb6c4" backgroundColor="#00090b10" zPosition="1" />' % (i, GRID_X + int(i * 30 * PPM), RULER_Y))
+		add('<widget name="tick%d" position="%d,%d" size="200,40" font="Regular;22" foregroundColor="%s" backgroundColor="%s" valign="center" zPosition="1" />' % (i, GRID_X + int(i * 30 * PPM), RULER_Y, S.S_INK_PAST, S.S_GROUND))
 	# Rows.
 	for r in range(ROWS):
 		y = GRID_Y + r * ROW_PITCH
-		add('<widget name="channel%d" position="%d,%d" size="%d,%d" font="Regular;26" foregroundColor="#00f4f6fa" backgroundColor="#00141922" cornerRadius="16" valign="center" noWrap="1" zPosition="1" />' % (r, CHANNEL_X, y, CHANNEL_W, ROW_H))
+		add('<widget name="channel%d" position="%d,%d" size="%d,%d" font="Regular;24" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" noWrap="1" zPosition="1" />' % (r, CHANNEL_X, y, CHANNEL_W, ROW_H, S.S_INK, S.S_CARD))
 		for c in range(CELLS_PER_ROW):
-			add('<widget name="cell%d_%d" position="%d,%d" size="10,%d" font="Regular;24" foregroundColor="#00f4f6fa" backgroundColor="#00141922" cornerRadius="16" valign="center" noWrap="1" zPosition="1" />' % (r, c, GRID_X, y, ROW_H))
-	add('<widget name="now" position="%d,%d" size="4,%d" backgroundColor="#005b9bff" zPosition="3" />' % (GRID_X, GRID_Y - 8, ROWS * ROW_PITCH))
-	add('<widget name="focus" position="%d,%d" size="200,%d" font="Regular;24" foregroundColor="#0007090c" backgroundColor="#00f4f6fa" cornerRadius="16" valign="center" noWrap="1" zPosition="4" />' % (GRID_X, GRID_Y, ROW_H))
-	add('<widget name="hint" position="96,1000" size="1728,40" font="Regular;24" foregroundColor="#006f7889" backgroundColor="#00090b10" valign="center" />')
+			add('<widget name="cell%d_%d" position="%d,%d" size="10,%d" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" zPosition="1" />' % (r, c, GRID_X, y, ROW_H, S.S_INK, S.S_CARD))
+	add('<widget name="now" position="%d,%d" size="3,%d" backgroundColor="%s" zPosition="3" />' % (GRID_X, RULER_Y, GRID_Y - RULER_Y + ROWS * ROW_PITCH - (ROW_PITCH - ROW_H), S.S_ACCENT))
+	add('<widget name="focus" position="%d,%d" size="200,%d" font="Regular;22" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" valign="center" zPosition="4" />' % (GRID_X, GRID_Y, ROW_H, S.S_DARK, S.S_INK))
 	add('</screen>')
 	return "\n".join(parts)
 
@@ -121,10 +127,11 @@ def loadEvents(ref, start, minutes):
 class HaloGuide(Screen):
 	skin = _skin()
 
-	def __init__(self, session, services, startIndex=0, recordTimers=None):
+	def __init__(self, session, services, startIndex=0, recordTimers=None, bouquetName=None, playing=None):
 		Screen.__init__(self, session)
 		self.services = services
 		self.recordTimers = recordTimers
+		self.playing = playing           # ref string of the channel on screen
 		self.animator = Animator()
 		self.closing = False
 		now = time()
@@ -135,8 +142,8 @@ class HaloGuide(Screen):
 		self.selected = None                 # the selected event (dict) or None
 		self.rows = {}                       # (service index, windowStart) -> events
 
-		self["bouquet"] = Label("")
-		for name in ("when", "title", "description", "progressTrack", "progress", "now", "focus", "hint"):
+		Chrome.addNavLabels(self)
+		for name in ("day", "bouquet", "hint", "live", "meta", "title", "description", "chipRecord", "chipWatch", "chipPlus", "now", "focus"):
 			self[name] = Label("")
 		for i in range(WINDOW_MIN // 30):
 			self["tick%d" % i] = Label("")
@@ -144,7 +151,9 @@ class HaloGuide(Screen):
 			self["channel%d" % r] = Label("")
 			for c in range(CELLS_PER_ROW):
 				self["cell%d_%d" % (r, c)] = Label("")
-		self["hint"].setText(_("OK  Watch     Green  Record     CH+/-  Page     Back  Close"))
+		self["hint"].setText(_("◀ ▶ programmes    ▲ ▼ channels    CH+/- page"))
+		self["chipWatch"].setText(_("OK  Watch"))
+		self["bouquet"].setText(bouquetName or _("All channels"))
 		self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "ColorActions", "ChannelSelectBaseActions"], {
 			"ok": self.watch,
 			"cancel": self.exit,
@@ -200,10 +209,26 @@ class HaloGuide(Screen):
 	def start(self):
 		self.drawAll()
 		self.select(animate=False)
-		self.animator.move(self.instance, (0, SCREEN_H), (0, 0), 280, EASE_OUT_CUBIC)
+		self.showLive()
+		self.animator.move(self.instance, (0, 140), (0, 0), 260, EASE_OUT_CUBIC)
+
+	def cellText(self, event, width):
+		if width < 48:
+			return ""
+		if width < 150:
+			return "  " + event["title"]
+		return "  %s\n  %s – %s" % (event["title"], _hm(event["begin"]), _hm(event["end"]))
+
+	def showLive(self):
+		for i, (ref, name) in enumerate(self.services):
+			if ref.toString() == self.playing:
+				self["live"].setText(_("LIVE · %s") % Chrome.channelNumber(ref, i))
+				return
+		self["live"].setText(_("LIVE"))
 
 	def drawAll(self):
 		now = time()
+		self["day"].setText(_day(self.windowStart))
 		for i in range(WINDOW_MIN // 30):
 			self["tick%d" % i].setText(_hm(self.windowStart + i * 1800))
 		for r in range(ROWS):
@@ -215,7 +240,7 @@ class HaloGuide(Screen):
 				for cell in cells:
 					cell.hide()
 				continue
-			channel.setText("  %s" % self.services[index][1])
+			channel.setText("   %-4s %s" % (Chrome.channelNumber(self.services[index][0], index), self.services[index][1]))
 			channel.show()
 			events = self.events(index)
 			for c, cell in enumerate(cells):
@@ -240,7 +265,7 @@ class HaloGuide(Screen):
 					else:
 						inst.setBackgroundColor(CARD)
 						inst.setForegroundColor(INK)
-				cell.setText(("  " + event["title"]) if w > 48 else "")
+				cell.setText(self.cellText(event, w))
 				cell.show()
 		marker = self["now"]
 		if self.windowStart <= now < self.windowEnd() and marker.instance:
@@ -256,8 +281,8 @@ class HaloGuide(Screen):
 		inst = focus.instance
 		if self.selected and inst:
 			x, y, w = self.cellRect(self.selected, self.row)
-			focus.setText("  " + self.selected["title"])
-			inst.resize(eSize(max(w, 120), ROW_H))
+			focus.setText(self.cellText(self.selected, max(w, 200)))
+			inst.resize(eSize(max(w, 200), ROW_H))
 			current = inst.position()
 			if animate:
 				self.animator.move(inst, (current.x(), current.y()), (x, y), 160, EASE_OUT_CUBIC)
@@ -272,32 +297,29 @@ class HaloGuide(Screen):
 		event = self.selected
 		if index >= len(self.services):
 			return
-		channel = self.services[index][1]
+		ref, channel = self.services[index]
+		number = Chrome.channelNumber(ref, index)
+		plusOne = Chrome.plusOneFor(channel, self.services)
 		if not event:
-			self["when"].setText(channel)
+			self["meta"].setText("%s · %s" % (number, channel))
 			self["title"].setText(_("No programme information"))
 			self["description"].setText("")
-			self.setProgress(None)
+			self["chipRecord"].hide()
+			self["chipPlus"].hide()
 			return
-		self["when"].setText("%s – %s    %s" % (_hm(event["begin"]), _hm(event["end"]), channel))
+		self["meta"].setText("%s · %s · %s – %s" % (number, channel, _hm(event["begin"]), _hm(event["end"])))
 		self["title"].setText(event["title"])
 		text = event["short"]
 		if event["extended"] and event["extended"] not in text:
-			text = (text + "\n" + event["extended"]).strip()
+			text = (text + "  " + event["extended"]).strip()
 		self["description"].setText(text)
-		self.setProgress(event)
-
-	def setProgress(self, event):
-		bar = self["progress"]
-		now = time()
-		if event and event["begin"] <= now < event["end"] and bar.instance:
-			done = (now - event["begin"]) / float(event["end"] - event["begin"])
-			bar.instance.resize(eSize(max(6, int(1648 * done)), 6))
-			bar.show()
-			self["progressTrack"].show()
+		self["chipRecord"].setText(_("●  Recording set") if self.isRecording(index, event) else _("●  Record"))
+		self["chipRecord"].show()
+		if plusOne:
+			self["chipPlus"].setText(_("Also on %s at %s") % (plusOne[1], _hm(event["begin"] + 3600)))
+			self["chipPlus"].show()
 		else:
-			bar.hide()
-			self["progressTrack"].hide()
+			self["chipPlus"].hide()
 
 	# ---------------------------------------------------------------- keys
 
@@ -397,7 +419,7 @@ class HaloGuide(Screen):
 		if self.closing:
 			return
 		self.closing = True
-		self.animator.move(self.instance, (0, 0), (0, SCREEN_H), 220, EASE_OUT_CUBIC, onDone=lambda: self.close(result))
+		self.animator.move(self.instance, (0, 0), (0, 140), 180, EASE_OUT_CUBIC, onDone=lambda: self.close(result))
 
 
 def openGuide(session, infobar=None):
@@ -422,4 +444,5 @@ def openGuide(session, infobar=None):
 			else:
 				session.nav.playService(ref)
 
-	session.openWithCallback(chosen, HaloGuide, services, start, getattr(session.nav, "RecordTimer", None))
+	bouquetName = ServiceReference(root).getServiceName() if root else None
+	session.openWithCallback(chosen, HaloGuide, services, start, getattr(session.nav, "RecordTimer", None), bouquetName, current.toString() if current else None)
