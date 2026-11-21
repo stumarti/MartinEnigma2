@@ -79,6 +79,52 @@ class _PythonMove:
 				self.apply(1.0)
 
 
+class _PythonGroup:
+	"""Several widgets moving together on one timer (one repaint pass per frame)."""
+
+	def __init__(self, items, durationMs, curve, onDone):
+		self.items = items  # [(instance, start, end)]
+		self.duration = max(1, durationMs) / 1000.0
+		self.curve = curve
+		self.onDone = onDone
+		self.began = monotonic()
+		self.timer = eTimer()
+		self.timer.callback.append(self.frame)
+		self.apply(0.0)
+		self.timer.start(FRAME_MS, False)
+
+	def apply(self, progress):
+		e = ease(self.curve, progress)
+		for instance, start, end in self.items:
+			instance.move(ePoint(int(round(start[0] + (end[0] - start[0]) * e)), int(round(start[1] + (end[1] - start[1]) * e))))
+
+	def frame(self):
+		progress = (monotonic() - self.began) / self.duration
+		if progress >= 1.0:
+			self.stop(jumpToEnd=True)
+			if self.onDone:
+				self.onDone()
+			return
+		self.apply(progress)
+
+	def stop(self, jumpToEnd=True):
+		if self.timer is not None:
+			self.timer.stop()
+			self.timer = None
+			if jumpToEnd:
+				self.apply(1.0)
+
+
+class _GroupMember:
+	"""How a group shows up per instance, so cancelling one member stops the group."""
+
+	def __init__(self, group):
+		self.group = group
+
+	def stop(self, jumpToEnd=True):
+		self.group.stop(jumpToEnd)
+
+
 class _NativeMove:
 	def __init__(self, instance, start, end, durationMs, curve, onDone):
 		self.instance = instance
@@ -116,12 +162,27 @@ class Animator:
 		job = _NativeMove if hasNativeAnimation(instance) else _PythonMove
 		self.running[id(instance)] = job(instance, start, end, durationMs, curve, onDone)
 
+	def moveGroup(self, items, durationMs=250, curve=EASE_OUT_CUBIC, onDone=None):
+		"""Move several widgets together: items is a list of (instance, start, end)."""
+		items = [(inst, start, end) for inst, start, end in items if inst is not None]
+		for inst, start, end in items:
+			self.cancel(inst)
+		if not items:
+			return
+		if hasNativeAnimation(items[0][0]):
+			for i, (inst, start, end) in enumerate(items):
+				self.running[id(inst)] = _NativeMove(inst, start, end, durationMs, curve, onDone if i == 0 else None)
+		else:
+			member = _GroupMember(_PythonGroup(items, durationMs, curve, onDone))
+			for inst, start, end in items:
+				self.running[id(inst)] = member
+
 	def cancel(self, instance, jumpToEnd=True):
 		job = self.running.pop(id(instance), None)
 		if job is not None:
 			job.stop(jumpToEnd)
 
 	def stop(self):
-		for job in list(self.running.values()):
+		for job in set(self.running.values()):
 			job.stop(True)
 		self.running = {}

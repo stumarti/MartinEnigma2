@@ -8,8 +8,9 @@
 #   OK              watch the chosen channel, or open the menu item
 #   back / MENU     close
 #
-# A white ring slides between channel tiles and a white pill slides along the
-# menu bar; the dark menu text follows the pill.
+# The chosen channel card lifts up with a little bounce (and the one you left
+# settles back down), and a white pill slides along the menu bar; the dark menu
+# text follows the pill.
 
 from time import localtime, strftime, time
 
@@ -22,13 +23,27 @@ from Screens.Screen import Screen
 
 from . import Chrome
 from .Animator import EASE_OUT_BACK, EASE_OUT_CUBIC, Animator
-from .Chrome import INK, INK_DARK, INK_QUIET, NAV, NAV_Y, navX
+from .Chrome import CARD, CARD_NOW, INK, INK_DARK, INK_QUIET, NAV, NAV_Y, navX
 
 TILES = 6
 TILE_X0, TILE_Y = 96, 790
 TILE_W, TILE_H = 268, 150
 TILE_STEP = 292
-RING = 4               # ring thickness around the focused tile
+RAISE = 18             # how far the chosen card lifts
+# The parts of a channel card that lift together, as offsets from the card's corner.
+CARD_PARTS = {
+	"tile": (0, 0),
+	"picon": (29, 26),
+	"name": (12, 26),
+	"number": (14, 8),
+	"tileTrack": (20, TILE_H - 14),
+	"tileBar": (20, TILE_H - 14),
+}
+# A shade that fades from clear to about 30% dark (alpha b3 = 70% transparent).
+# Text over the picture also gets a soft shadow, so it reads on bright scenes.
+SHADOW = 'shadowColor="#50000000" shadowOffset="-2,-2"'
+SHADE_DOWN = "#b3090b10,#ff090b10,vertical,1"   # darkest at the top
+SHADE_UP = "#ff090b10,#b3090b10,vertical,1"     # darkest at the bottom
 PROGRESS_W = 520       # the now-playing progress bar
 BADGE_LIVE = gRGB(0x005B9BFF)   # the channel you're watching
 BADGE_OTHER = gRGB(0xB0FFFFFF)  # any other channel: translucent white
@@ -42,30 +57,34 @@ def _tileX(slot):
 	return TILE_X0 + slot * TILE_STEP
 
 
+def partPosition(part, slot, raised=False):
+	dx, dy = CARD_PARTS[part]
+	return _tileX(slot) + dx, TILE_Y + dy - (RAISE if raised else 0)
+
+
 def _skin():
 	S = Chrome
 	parts = ['<screen name="HaloHome" position="0,0" size="1920,1080" flags="wfNoBorder" backgroundColor="%s" resolution="1920,1080">' % S.S_CLEAR]
 	add = parts.append
-	# Shade behind the header and the lower half, so text reads over any picture.
-	add('<eLabel position="0,0" size="1920,190" backgroundColor="%s" zPosition="0" />' % S.S_SHADE)
-	add('<eLabel position="0,400" size="1920,680" backgroundColor="%s" zPosition="0" />' % S.S_SHADE)
+	# Gradient shades behind the header and the lower half, so text reads over any picture.
+	add('<eLabel position="0,0" size="1920,260" backgroundColor="%s" zPosition="0" />' % SHADE_DOWN)
+	add('<eLabel position="0,300" size="1920,780" backgroundColor="%s" zPosition="0" />' % SHADE_UP)
 	parts.extend(Chrome.headerSkin(S.S_SHADE, 0, interactive=True))
 	# What's on now.
 	add('<widget name="badge" position="96,424" size="110,36" font="Regular;20" foregroundColor="%s" backgroundColor="%s" cornerRadius="8" halign="center" valign="center" zPosition="1" />' % (S.S_DARK, S.S_ACCENT))
-	add('<widget name="meta" position="222,420" size="1000,44" font="Regular;26" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK_QUIET, S.S_SHADE))
-	add('<widget name="title" position="96,470" size="1400,90" font="Regular;72" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_SHADE))
-	add('<widget name="start" position="96,574" size="84,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" zPosition="1" />' % (S.S_INK_QUIET, S.S_SHADE))
+	add('<widget name="meta" position="222,420" size="1000,44" font="Regular;26" foregroundColor="%s" backgroundColor="%s" transparent="1" %s valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_SHADE, SHADOW))
+	add('<widget name="title" position="96,470" size="1400,90" font="Regular;72" foregroundColor="%s" backgroundColor="%s" transparent="1" %s valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_SHADE, SHADOW))
+	add('<widget name="start" position="96,574" size="84,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" %s valign="center" zPosition="1" />' % (S.S_INK_QUIET, S.S_SHADE, SHADOW))
 	add('<widget name="track" position="186,586" size="%d,8" backgroundColor="#b0ffffff" cornerRadius="4" zPosition="1" />' % PROGRESS_W)
 	add('<widget name="bar" position="186,586" size="0,8" backgroundColor="%s" cornerRadius="4" zPosition="2" />' % S.S_ACCENT)
-	add('<widget name="end" position="%d,574" size="84,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" zPosition="1" />' % (196 + PROGRESS_W, S.S_INK_QUIET, S.S_SHADE))
-	add('<widget name="left" position="%d,574" size="240,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" zPosition="1" />' % (290 + PROGRESS_W, S.S_INK, S.S_SHADE))
+	add('<widget name="end" position="%d,574" size="84,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" %s valign="center" zPosition="1" />' % (196 + PROGRESS_W, S.S_INK_QUIET, S.S_SHADE, SHADOW))
+	add('<widget name="left" position="%d,574" size="240,32" font="Regular;24" foregroundColor="%s" backgroundColor="%s" transparent="1" %s valign="center" zPosition="1" />' % (290 + PROGRESS_W, S.S_INK, S.S_SHADE, SHADOW))
 	add('<eLabel text="NEXT" position="96,630" size="84,34" font="Regular;18" foregroundColor="%s" backgroundColor="#b0ffffff" cornerRadius="8" halign="center" valign="center" zPosition="1" />' % S.S_INK)
-	add('<widget name="next" position="196,626" size="1100,42" font="Regular;26" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_SHADE))
+	add('<widget name="next" position="196,626" size="1100,42" font="Regular;26" foregroundColor="%s" backgroundColor="%s" transparent="1" %s valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_SHADE, SHADOW))
 	add('<widget name="plusOne" position="1240,618" size="584,56" font="Regular;24" foregroundColor="%s" backgroundColor="%s" cornerRadius="16" halign="center" valign="center" noWrap="1" zPosition="1" />' % (S.S_INK, S.S_GLASS))
 	# Channel row.
-	add('<eLabel text="Channels" position="96,730" size="400,44" font="Regular;28" foregroundColor="%s" backgroundColor="%s" transparent="1" valign="center" zPosition="1" />' % (S.S_INK, S.S_SHADE))
-	add('<widget name="hint" position="1124,730" size="700,44" font="Regular;22" foregroundColor="%s" backgroundColor="%s" transparent="1" halign="right" valign="center" zPosition="1" />' % (S.S_INK_PAST, S.S_SHADE))
-	add('<widget name="ring" position="%d,%d" size="%d,%d" backgroundColor="%s" cornerRadius="24" zPosition="1" />' % (_tileX(0) - RING, TILE_Y - RING, TILE_W + 2 * RING, TILE_H + 2 * RING, S.S_INK))
+	add('<eLabel text="Channels" position="96,730" size="400,44" font="Regular;28" foregroundColor="%s" backgroundColor="%s" transparent="1" %s valign="center" zPosition="1" />' % (S.S_INK, S.S_SHADE, SHADOW))
+	add('<widget name="hint" position="1124,730" size="700,44" font="Regular;22" foregroundColor="%s" backgroundColor="%s" transparent="1" %s halign="right" valign="center" zPosition="1" />' % (S.S_INK_QUIET, S.S_SHADE, SHADOW))
 	for i in range(TILES):
 		x = _tileX(i)
 		add('<widget name="tile%d" position="%d,%d" size="%d,%d" backgroundColor="%s" cornerRadius="20" zPosition="2" />' % (i, x, TILE_Y, TILE_W, TILE_H, S.S_CARD))
@@ -74,8 +93,8 @@ def _skin():
 		add('<widget name="number%d" position="%d,%d" size="80,28" font="Regular;18" foregroundColor="%s" backgroundColor="%s" transparent="1" zPosition="4" />' % (i, x + 14, TILE_Y + 8, S.S_INK_QUIET, S.S_CARD))
 		add('<widget name="tileTrack%d" position="%d,%d" size="%d,6" backgroundColor="#c8ffffff" zPosition="3" />' % (i, x + 20, TILE_Y + TILE_H - 14, TILE_W - 40))
 		add('<widget name="tileBar%d" position="%d,%d" size="0,6" backgroundColor="%s" zPosition="4" />' % (i, x + 20, TILE_Y + TILE_H - 14, S.S_INK))
-		add('<widget name="show%d" position="%d,%d" size="%d,32" font="Regular;22" foregroundColor="%s" backgroundColor="%s" transparent="1" noWrap="1" zPosition="1" />' % (i, x + 4, TILE_Y + TILE_H + 12, TILE_W - 8, S.S_INK, S.S_SHADE))
-		add('<widget name="later%d" position="%d,%d" size="%d,28" font="Regular;18" foregroundColor="%s" backgroundColor="%s" transparent="1" noWrap="1" zPosition="1" />' % (i, x + 4, TILE_Y + TILE_H + 46, TILE_W - 8, S.S_INK_QUIET, S.S_SHADE))
+		add('<widget name="show%d" position="%d,%d" size="%d,32" font="Regular;22" foregroundColor="%s" backgroundColor="%s" transparent="1" %s noWrap="1" zPosition="1" />' % (i, x + 4, TILE_Y + TILE_H + 12, TILE_W - 8, S.S_INK, S.S_SHADE, SHADOW))
+		add('<widget name="later%d" position="%d,%d" size="%d,28" font="Regular;18" foregroundColor="%s" backgroundColor="%s" transparent="1" %s noWrap="1" zPosition="1" />' % (i, x + 4, TILE_Y + TILE_H + 46, TILE_W - 8, S.S_INK_QUIET, S.S_SHADE, SHADOW))
 	add('</screen>')
 	return "\n".join(parts)
 
@@ -94,11 +113,12 @@ class HaloHome(Screen):
 		self.first = self.firstFor(self.focus)
 		self.navIndex = 0
 		self.painted = None
+		self.raisedSlot = None
 		self.cache = {}
 
 		Chrome.addNavLabels(self)
 		self["navPill"] = Label("")
-		for name in ("badge", "meta", "title", "start", "track", "bar", "end", "left", "next", "plusOne", "hint", "ring"):
+		for name in ("badge", "meta", "title", "start", "track", "bar", "end", "left", "next", "plusOne", "hint"):
 			self[name] = Label("")
 		for i in range(TILES):
 			for name in ("tile", "name", "number", "tileTrack", "tileBar", "show", "later"):
@@ -144,14 +164,20 @@ class HaloHome(Screen):
 
 	def start(self):
 		self.drawTiles()
-		self.placeRing(animate=False)
+		self.liftTo(self.focus - self.first, animate=False)
 		self.paintNav(0)
 		self.showDetails()
 		self.animator.move(self.instance, (0, 140), (0, 0), 260, EASE_OUT_CUBIC)
 
 	def drawTiles(self):
 		now = time()
+		self.raisedSlot = None
 		for slot in range(TILES):
+			self.setCardStyle(slot, False)
+			for part in CARD_PARTS:
+				inst = self["%s%d" % (part, slot)].instance
+				if inst:
+					inst.move(ePoint(*partPosition(part, slot)))
 			index = self.first + slot
 			names = ("tile", "name", "number", "tileTrack", "tileBar", "show", "later")
 			if index >= len(self.services):
@@ -184,19 +210,35 @@ class HaloHome(Screen):
 			else:
 				bar.hide()
 
-	def ringPosition(self):
-		return _tileX(self.focus - self.first) - RING, TILE_Y - RING
+	def setCardStyle(self, slot, chosen):
+		tile = self["tile%d" % slot].instance
+		if tile:
+			tile.setBackgroundColor(CARD_NOW if chosen else CARD)
+			tile.setBorderWidth(3 if chosen else 0)
+			tile.setBorderColor(INK)
+			tile.invalidate()
 
-	def placeRing(self, animate=True):
-		ring = self["ring"].instance
-		if not ring:
+	def liftTo(self, slot, animate=True):
+		"""Settle the previous card and lift the chosen one, with a bounce."""
+		old = self.raisedSlot
+		if old == slot:
 			return
-		target = self.ringPosition()
+		if old is not None:
+			self.setCardStyle(old, False)
+			items = [(self["%s%d" % (part, old)].instance, partPosition(part, old, True), partPosition(part, old)) for part in CARD_PARTS]
+			self.moveCard(items, 160, EASE_OUT_CUBIC, animate)
+		self.setCardStyle(slot, True)
+		items = [(self["%s%d" % (part, slot)].instance, partPosition(part, slot), partPosition(part, slot, True)) for part in CARD_PARTS]
+		self.moveCard(items, 340, EASE_OUT_BACK, animate)
+		self.raisedSlot = slot
+
+	def moveCard(self, items, durationMs, curve, animate):
 		if animate:
-			current = ring.position()
-			self.animator.move(ring, (current.x(), current.y()), target, 200, EASE_OUT_BACK)
+			self.animator.moveGroup(items, durationMs, curve)
 		else:
-			ring.move(ePoint(*target))
+			for inst, start, end in items:
+				if inst:
+					inst.move(ePoint(*end))
 
 	def showDetails(self):
 		if not self.services:
@@ -289,10 +331,9 @@ class HaloHome(Screen):
 		if index < self.first or index >= self.first + TILES:
 			self.first = index if index < self.first else index - TILES + 1
 			self.first = max(0, min(self.first, max(0, len(self.services) - TILES)))
+			self.animator.stop()
 			self.drawTiles()
-			self.placeRing(animate=False)
-		else:
-			self.placeRing()
+		self.liftTo(self.focus - self.first)
 		self.showDetails()
 
 	def page(self, delta):
@@ -300,8 +341,9 @@ class HaloHome(Screen):
 			return
 		self.focus = max(0, min(len(self.services) - 1, self.focus + delta))
 		self.first = self.firstFor(self.focus)
+		self.animator.stop()
 		self.drawTiles()
-		self.placeRing(animate=False)
+		self.liftTo(self.focus - self.first)
 		self.showDetails()
 
 	def up(self):

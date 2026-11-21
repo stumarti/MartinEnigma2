@@ -103,6 +103,12 @@ class FakeWidget:
 	def setPixmapFromFile(self, path):
 		self.pixmap = path
 
+	def setBorderWidth(self, width):
+		self.borderWidth = width
+
+	def setBorderColor(self, colour):
+		self.borderColor = colour
+
 	def invalidate(self):
 		pass
 
@@ -408,16 +414,23 @@ class HomeTests(unittest.TestCase):
 		advance(0.4)
 		return home
 
-	def ringSlot(self, home):
-		x = home["ring"].instance.pos[0] + Home.RING
-		return (x - Home.TILE_X0) / float(Home.TILE_STEP)
+	def raisedSlots(self, home):
+		"""Slots whose card sits lifted (tile above its resting row)."""
+		return [slot for slot in range(Home.TILES) if home["tile%d" % slot].instance.pos[1] < Home.TILE_Y]
+
+	def assertLifted(self, home, slot):
+		self.assertEqual(self.raisedSlots(home), [slot])
+		for part in Home.CARD_PARTS:
+			self.assertEqual(home["%s%d" % (part, slot)].instance.pos, Home.partPosition(part, slot, raised=True), part)
+		self.assertEqual(home["tile%d" % slot].instance.borderWidth, 3)
+		self.assertEqual(home["tile%d" % slot].instance.background, Chrome.CARD_NOW)
 
 	def test_opens_on_the_channel_being_watched(self):
 		home = self.openHome(start=3)
 		self.assertEqual(home.instance.pos, (0, 0))
 		self.assertEqual(home.focus, 3)
 		self.assertEqual(home.first, 2)
-		self.assertEqual(self.ringSlot(home), 1)
+		self.assertLifted(home, 1)
 		self.assertIn("Channel 4", home["meta"].text)
 		self.assertEqual(home["badge"].text, "LIVE")
 		self.assertTrue(home["title"].text.startswith("Show 3-"))
@@ -437,29 +450,44 @@ class HomeTests(unittest.TestCase):
 		self.assertEqual(home["number0"].text, "3")
 		self.assertTrue(home["show0"].text.startswith("Show 2-"))
 
-	def test_ring_slides_then_the_row_scrolls(self):
+	def test_chosen_card_lifts_with_a_bounce_and_the_row_scrolls(self):
 		home = self.openHome(start=3)
-		for _ in range(3):
+		home["actions"].actions["right"]()
+		peak = 0
+		for _ in range(25):  # watch the lift: it overshoots, then settles
+			advance(0.016)
+			peak = max(peak, Home.TILE_Y - home["tile2"].instance.pos[1])
+		self.assertGreater(peak, Home.RAISE)
+		self.assertLifted(home, 2)
+		self.assertEqual(home["tile1"].instance.borderWidth, 0)
+		for _ in range(2):
 			home["actions"].actions["right"]()
-		advance(0.3)
+		advance(0.4)
 		self.assertEqual(home.focus, 6)
-		self.assertEqual(self.ringSlot(home), 4)
+		self.assertLifted(home, 4)
 		home["actions"].actions["right"]()
 		home["actions"].actions["right"]()  # past the last tile: the row moves
-		advance(0.3)
+		advance(0.4)
 		self.assertEqual(home.focus, 8)
 		self.assertEqual(home.first, 3)
-		self.assertEqual(self.ringSlot(home), 5)
+		self.assertLifted(home, 5)
 		self.assertEqual(home["name5"].text, "Channel 9")
 		self.assertIn("Channel 9", home["meta"].text)
 		self.assertEqual(home["badge"].text, "ON NOW")
 
+	def test_text_under_the_cards_stays_put(self):
+		home = self.openHome(start=3)
+		home["actions"].actions["right"]()
+		advance(0.4)
+		self.assertEqual(home["show2"].instance.moves, 0)
+		self.assertEqual(home["later2"].instance.moves, 0)
+
 	def test_wraps_from_the_last_channel_to_the_first(self):
 		home = self.openHome(start=9)
 		home["actions"].actions["right"]()
-		advance(0.3)
+		advance(0.4)
 		self.assertEqual((home.focus, home.first), (0, 0))
-		self.assertEqual(self.ringSlot(home), 0)
+		self.assertLifted(home, 0)
 
 	def test_ok_watches_the_chosen_channel(self):
 		home = self.openHome(start=3)
@@ -510,7 +538,10 @@ class HomeTests(unittest.TestCase):
 	def test_works_with_the_native_engine(self):
 		home = self.openHome(widgetClass=NativeWidget)
 		home["actions"].actions["right"]()
-		self.assertEqual(home["ring"].instance.native[2], Home.TILE_X0 + 2 * Home.TILE_STEP - Home.RING)
+		native = home["tile2"].instance.native
+		self.assertEqual(native[3], Home.TILE_Y - Home.RAISE)
+		self.assertEqual(native[5], 3)  # ease-out back: the bounce
+		self.assertEqual(home["tile1"].instance.native[3], Home.TILE_Y)
 
 
 class PluginTests(unittest.TestCase):

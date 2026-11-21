@@ -139,13 +139,25 @@ class Element:
 		self.text = node.get("text", "")
 		self.font = node.get("font")
 		self.fg = colour(node.get("foregroundColor"), named) or (244, 246, 250, 255)
-		self.bg = colour(node.get("backgroundColor"), named)
+		self.gradient = None
+		background = node.get("backgroundColor") or ""
+		if "," in background:
+			parts = [part.strip() for part in background.split(",")]
+			colours = [colour(part, named) for part in parts if part.startswith("#") or part in named]
+			direction = next((part for part in parts if part in ("vertical", "horizontal")), "vertical")
+			self.gradient = (colours, direction)
+			self.bg = None
+		else:
+			self.bg = colour(background, named)
 		self.transparent = node.get("transparent") == "1"
 		self.radius = int(re.split(r"[;,]", node.get("cornerRadius", "0"))[0] or 0)
 		self.halign = node.get("halign", "left")
 		self.valign = node.get("valign", "top")
 		self.noWrap = node.get("noWrap") == "1"
 		self.borderWidth = int(node.get("borderWidth", "0") or 0)
+		self.shadow = colour(node.get("shadowColor"), named)
+		ox, oy = (int(v) for v in node.get("shadowOffset", "0,0").split(","))
+		self.shadowOffset = (-ox, -oy)  # Enigma2 moves the text by the offset; the shadow stays
 		self.borderColor = colour(node.get("borderColor"), named)
 		self.visible = True
 		self.pixmap = None
@@ -162,6 +174,9 @@ class Element:
 				self.fg = gRGBtoRGBA(inst.colour)
 			if hasattr(inst, "background"):
 				self.bg = gRGBtoRGBA(inst.background)
+			if hasattr(inst, "borderWidth"):
+				self.borderWidth = inst.borderWidth
+				self.borderColor = gRGBtoRGBA(inst.borderColor) if inst.borderWidth else None
 			self.pixmap = getattr(inst, "pixmap", None)
 		self.text = component.text if component.text is not None else ""
 		self.visible = component.visible
@@ -200,6 +215,24 @@ def render(screen, path, clock="21:44"):
 				except Exception:
 					pass
 			continue
+		if element.gradient and w > 0 and h > 0:
+			colours, direction = element.gradient
+			colours = colours + [colours[-1]] * (3 - len(colours)) if len(colours) == 2 else colours
+			if len(colours) == 3 and colours[1] == colours[2]:
+				stops = [colours[0], colours[2]]
+			else:
+				stops = colours
+			steps = h if direction == "vertical" else w
+			for i in range(steps):
+				t = i / float(max(1, steps - 1))
+				seg = min(len(stops) - 2, int(t * (len(stops) - 1)))
+				k = t * (len(stops) - 1) - seg
+				a, b = stops[seg], stops[seg + 1]
+				c = tuple(int(a[j] + (b[j] - a[j]) * k) for j in range(4))
+				if direction == "vertical":
+					draw.line([(x, y + i), (x + w - 1, y + i)], fill=c)
+				else:
+					draw.line([(x + i, y), (x + i, y + h - 1)], fill=c)
 		if element.bg and not element.transparent and w > 0 and h > 0:
 			radius = min(element.radius, w // 2, h // 2)
 			draw.rounded_rectangle(box, radius=radius, fill=element.bg)
@@ -216,6 +249,8 @@ def render(screen, path, clock="21:44"):
 			for line in lines:
 				tw = draw.textlength(line, font=fnt)
 				tx = x if element.halign == "left" else (x + (w - tw) / 2 if element.halign == "center" else x + w - tw)
+				if element.shadow:
+					draw.text((tx + element.shadowOffset[0], ty + (lineHeight - fnt.size) / 2 + element.shadowOffset[1]), line, font=fnt, fill=element.shadow)
 				draw.text((tx, ty + (lineHeight - fnt.size) / 2), line, font=fnt, fill=element.fg)
 				ty += lineHeight
 		layer = layer.crop((0, 0, 1920, 1080))
