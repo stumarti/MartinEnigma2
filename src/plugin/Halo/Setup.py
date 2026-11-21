@@ -40,6 +40,7 @@ class HaloSetup(ConfigListScreen, Screen):
 	def buildList(self):
 		halo = config.plugins.halo
 		self["config"].list = [
+			getConfigListEntry(_("EPG button opens the Halo TV Guide"), halo.guide),
 			getConfigListEntry(_("Updates"), halo.autoupdate),
 			getConfigListEntry(_("Release repository (owner/name)"), halo.repo),
 		]

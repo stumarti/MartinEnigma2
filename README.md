@@ -52,6 +52,10 @@ Then on the box:
 3. Press **MENU** on live TV. Left and right move the white focus pill; OK opens
    the item; BACK slides the menu away. **Settings** opens the normal Enigma2
    main menu, so nothing is out of reach.
+4. **TV Guide** (in the menu, or the remote's **EPG** button) opens the Halo
+   guide: left/right move between programmes, up/down between channels,
+   CH+/CH− a page of channels, OK watches, green records. To get openATV's own
+   guide back on the EPG button, switch it off in **Plugins → Halo**.
 
 ## Build the image on GitHub
 

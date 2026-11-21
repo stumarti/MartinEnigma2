@@ -94,6 +94,12 @@ class FakeWidget:
 	def setForegroundColor(self, colour):
 		self.colour = colour
 
+	def setBackgroundColor(self, colour):
+		self.background = colour
+
+	def resize(self, size):
+		self.size = (size.width(), size.height())
+
 	def invalidate(self):
 		pass
 
@@ -109,13 +115,68 @@ class NativeWidget(FakeWidget):
 		self.stopped = jumpToEnd
 
 
-module("enigma", ePoint=ePoint, eTimer=eTimer, gRGB=lambda v: v, eServiceReference=lambda ref: types.SimpleNamespace(ref=ref, toString=lambda: ref))
+class eSize:
+	def __init__(self, w, h):
+		self._w, self._h = w, h
+
+	def width(self):
+		return self._w
+
+	def height(self):
+		return self._h
+
+
+class FakeRef:
+	isDirectory, isMarker = 1, 2
+
+	def __init__(self, ref, flags=0):
+		self.ref, self.flags = ref, flags
+
+	def toString(self):
+		return self.ref
+
+	def valid(self):
+		return bool(self.ref)
+
+
+EPG = {}  # service ref string -> list of (id, begin, duration, title, short, extended)
+
+
+class FakeEPGCache:
+	@staticmethod
+	def getInstance():
+		return FakeEPGCache
+
+	@staticmethod
+	def lookupEvent(query):
+		fields, (ref, _type, begin, minutes) = query[0], query[1]
+		end = begin + minutes * 60
+		return [e for e in EPG.get(ref, []) if e[1] < end and e[1] + e[2] > begin]
+
+
+def eServiceReference(ref):
+	return FakeRef(ref)
+
+
+eServiceReference.isDirectory, eServiceReference.isMarker = 1, 2
+
+module("enigma", ePoint=ePoint, eSize=eSize, eTimer=eTimer, gRGB=lambda v: v, eServiceReference=eServiceReference, eEPGCache=FakeEPGCache, eServiceCenter=None)
 
 
 class Label:
 	def __init__(self, text=""):
 		self.text = text
 		self.instance = None
+		self.visible = True
+
+	def setText(self, text):
+		self.text = text
+
+	def show(self):
+		self.visible = True
+
+	def hide(self):
+		self.visible = False
 
 
 class ActionMap:
@@ -142,8 +203,9 @@ class Screen(dict):
 		positions = {"focus": (360, 52), "brand": (136, 32)}
 		for i in range(6):
 			positions["item%d" % i] = (360 + i * 216, 52)
-		for name, pos in positions.items():
-			self[name].instance = widgetClass(*pos)
+		for name, component in self.items():
+			if isinstance(component, Label) and component.instance is None:
+				component.instance = widgetClass(*positions.get(name, (0, 0)))
 		for fn in self.onLayoutFinish:
 			fn()
 
@@ -165,7 +227,7 @@ config = types.SimpleNamespace(plugins=types.SimpleNamespace(), tv=types.SimpleN
 NOTIFICATIONS = []
 module("Components.ActionMap", ActionMap=ActionMap)
 module("Components.Label", Label=Label)
-module("Components.config", config=config, ConfigSubsection=ConfigSubsection, ConfigText=ConfigItem, ConfigInteger=ConfigItem, ConfigSelection=ConfigItem, getConfigListEntry=lambda *a: a)
+module("Components.config", config=config, ConfigSubsection=ConfigSubsection, ConfigText=ConfigItem, ConfigInteger=ConfigItem, ConfigSelection=ConfigItem, ConfigYesNo=ConfigItem, getConfigListEntry=lambda *a: a)
 module("Components.SystemInfo", BoxInfo=types.SimpleNamespace(getItem=lambda key: {"machinebuild": "zgemmah7", "BoxName": "zgemmah7", "model": "h7"}.get(key)))
 module("Components.ConfigList", ConfigListScreen=object)
 module("Components.Sources.StaticText", StaticText=Label)
@@ -174,7 +236,29 @@ module("Screens.MessageBox", MessageBox=types.SimpleNamespace(TYPE_INFO=0, TYPE_
 module("Screens.PluginBrowser", PluginBrowser="PluginBrowser")
 module("Screens.FlashManager", FlashImage="FlashImage")
 module("Screens.Standby", QUIT_RESTART=3, TryQuitMainloop="TryQuitMainloop")
-module("ServiceReference", ServiceReference=None)
+class ServiceReference:
+	def __init__(self, ref):
+		self.ref = ref
+
+
+class FakeTimer:
+	def __init__(self, serviceRef, begin, end, name, description, eit, **kwargs):
+		self.service_ref, self.begin, self.end, self.name, self.eit = serviceRef, begin, end, name, eit
+
+
+class FakeRecordTimers:
+	def __init__(self):
+		self.timer_list = []
+
+	def record(self, entry):
+		self.timer_list.append(entry)
+
+	def removeEntry(self, entry):
+		self.timer_list.remove(entry)
+
+
+module("ServiceReference", ServiceReference=ServiceReference)
+module("RecordTimer", RecordTimerEntry=FakeTimer)
 module("Tools.Notifications",
 	AddPopup=lambda text, *a, **k: NOTIFICATIONS.append(("popup", text)),
 	AddNotificationWithCallback=lambda fn, screen, text, *a, **k: NOTIFICATIONS.append(("ask", text, fn)))
@@ -195,7 +279,13 @@ class InfoBarMenu:
 		self.openedMainMenu = True
 
 
-module("Screens.InfoBarGenerics", InfoBarMenu=InfoBarMenu)
+class InfoBarEPG:
+	def openGraphEPG(self):
+		self.openedStockGuide = True
+
+
+module("Screens.InfoBarGenerics", InfoBarMenu=InfoBarMenu, InfoBarEPG=InfoBarEPG)
+module("Screens.InfoBar", InfoBar=types.SimpleNamespace(instance=None))
 
 
 class Deferred:
@@ -220,7 +310,7 @@ module("twisted.internet.threads", deferToThread=lambda fn, *a: Deferred(fn, *a)
 
 sys.path.insert(0, PLUGINS)
 from Halo import Animator, plugin, updatecore  # noqa: E402
-from Halo import TopMenu, Updater  # noqa: E402
+from Halo import Guide, TopMenu, Updater  # noqa: E402
 
 Animator.monotonic = lambda: CLOCK[0]
 
@@ -415,6 +505,162 @@ class UpdaterTests(unittest.TestCase):
 		config.plugins.halo.repo.value = "OWNER/halo"
 		Updater.HaloUpdater(Session()).check(manual=True)
 		self.assertTrue(any("No Halo release repository" in n[1] for n in NOTIFICATIONS))
+
+
+class GuideTests(unittest.TestCase):
+	def setUp(self):
+		import time as _time
+		self.now = _time.time()
+		half = self.now - self.now % 1800
+		EPG.clear()
+		self.services = []
+		for i in range(8):
+			ref = "1:0:1:%X:0:0:0:0:0:0:" % (i + 1)
+			self.services.append((FakeRef(ref), "Channel %d" % (i + 1)))
+			length = 1800 if i % 2 == 0 else 2700  # 30 or 45 minute programmes
+			events, begin, n = [], half - 3 * 3600, 0
+			while begin < half + 6 * 3600:
+				events.append((1000 * i + n, begin, length, "Show %d-%d" % (i, n), "short %d" % n, "long text %d" % n))
+				begin += length
+				n += 1
+			EPG[ref] = events
+		self.timers = FakeRecordTimers()
+
+	def openGuide(self, start=0):
+		guide = Guide.HaloGuide(Session(), self.services, start, self.timers)
+		guide.layout()
+		advance(0.4)
+		return guide
+
+	def pillRect(self, guide):
+		inst = guide["focus"].instance
+		return inst.pos
+
+	def test_opens_on_the_programme_on_now(self):
+		guide = self.openGuide(start=3)
+		self.assertEqual(guide.instance.pos, (0, 0))
+		event = guide.selected
+		self.assertLessEqual(event["begin"], self.now)
+		self.assertGreater(event["end"], self.now)
+		self.assertEqual(guide.top + guide.row, 3)
+		x, y, w = guide.cellRect(event, guide.row)
+		self.assertEqual(self.pillRect(guide), (x, y))
+		self.assertIn(event["title"], guide["focus"].text)
+		self.assertEqual(guide["title"].text, event["title"])
+
+	def test_right_and_left_slide_the_pill_between_programmes(self):
+		guide = self.openGuide()
+		first = guide.selected
+		guide["actions"].actions["right"]()
+		second = guide.selected
+		self.assertEqual(second["begin"], first["end"])
+		advance(0.3)
+		x, y, w = guide.cellRect(second, guide.row)
+		self.assertEqual(self.pillRect(guide), (x, y))
+		guide["actions"].actions["left"]()
+		advance(0.3)
+		self.assertEqual(guide.selected["id"], first["id"])
+
+	def test_moving_right_far_enough_pages_the_window(self):
+		guide = self.openGuide()
+		start = guide.windowStart
+		for _ in range(6):
+			guide["actions"].actions["right"]()
+			advance(0.3)
+		self.assertGreater(guide.windowStart, start)
+		self.assertGreaterEqual(guide.selected["end"], guide.windowStart)
+		self.assertLess(guide.selected["begin"], guide.windowEnd())
+		for _ in range(12):
+			guide["actions"].actions["left"]()
+			advance(0.3)
+		self.assertLessEqual(guide.windowStart, start)
+
+	def test_up_down_scroll_the_channel_rows(self):
+		guide = self.openGuide(start=0)
+		for _ in range(7):
+			guide["actions"].actions["down"]()
+			advance(0.2)
+		self.assertEqual(guide.top + guide.row, 7)
+		self.assertEqual(guide.top, 2)
+		self.assertEqual(guide["channel5"].text.strip(), "Channel 8")
+		guide["actions"].actions["down"]()  # already at the last channel
+		self.assertEqual(guide.top + guide.row, 7)
+		guide["actions"].actions["prevBouquet"]()
+		self.assertEqual(guide.top + guide.row, 1)
+
+	def test_selection_keeps_its_time_when_changing_channel(self):
+		guide = self.openGuide(start=0)
+		guide["actions"].actions["right"]()
+		target = guide.selected["begin"]
+		guide["actions"].actions["down"]()
+		event = guide.selected
+		self.assertLessEqual(event["begin"], target)
+		self.assertGreater(event["end"], target)
+
+	def test_cells_fill_the_window_and_mark_now_and_past(self):
+		guide = self.openGuide()
+		row = [guide["cell0_%d" % c] for c in range(Guide.CELLS_PER_ROW) if guide["cell0_%d" % c].visible]
+		self.assertGreaterEqual(len(row), 4)
+		lefts = [cell.instance.pos[0] for cell in row]
+		self.assertEqual(lefts, sorted(lefts))
+		self.assertGreaterEqual(min(lefts), Guide.GRID_X)
+		for cell in row:
+			self.assertLessEqual(cell.instance.pos[0] + cell.instance.size[0], Guide.GRID_X + Guide.GRID_W)
+		colours = {cell.instance.background for cell in row}
+		self.assertIn(Guide.CARD_NOW, colours)
+		self.assertTrue(guide["now"].visible)
+
+	def test_green_records_and_cancels(self):
+		guide = self.openGuide()
+		guide["actions"].actions["right"]()
+		guide["actions"].actions["green"]()
+		self.assertEqual(len(self.timers.timer_list), 1)
+		self.assertEqual(self.timers.timer_list[0].eit, guide.selected["id"])
+		recorded = [guide["cell%d_%d" % (guide.row, c)] for c in range(Guide.CELLS_PER_ROW) if guide["cell%d_%d" % (guide.row, c)].visible]
+		self.assertIn(Guide.RECORD, {cell.instance.background for cell in recorded})
+		guide["actions"].actions["green"]()
+		self.assertEqual(self.timers.timer_list, [])
+
+	def test_ok_slides_away_and_returns_the_channel(self):
+		guide = self.openGuide(start=2)
+		guide["actions"].actions["down"]()
+		guide["actions"].actions["ok"]()
+		self.assertEqual(guide.closed, "not closed")
+		advance(0.3)
+		self.assertEqual(guide.instance.pos, (0, 1080))
+		self.assertEqual(guide.closed.toString(), self.services[3][0].toString())
+
+	def test_channel_without_epg_shows_a_message(self):
+		EPG[self.services[0][0].toString()] = []
+		guide = self.openGuide(start=0)
+		self.assertIsNone(guide.selected)
+		self.assertFalse(guide["focus"].visible)
+		self.assertEqual(guide["title"].text, "No programme information")
+
+	def test_epg_button_opens_the_halo_guide_unless_switched_off(self):
+		opened = []
+		saved = Guide.openGuide
+		Guide.openGuide = lambda session, infobar=None: opened.append(infobar)
+		try:
+			plugin.installGuideHook()
+			bar = InfoBarEPG()
+			bar.session = Session()
+			config.plugins.halo.guide.value = True
+			bar.openGraphEPG()
+			self.assertEqual(opened, [bar])
+			config.plugins.halo.guide.value = False
+			bar.openGraphEPG()
+			self.assertTrue(bar.openedStockGuide)
+		finally:
+			Guide.openGuide = saved
+			config.plugins.halo.guide.value = True
+
+	def test_skin_names_every_widget(self):
+		import xml.etree.ElementTree as ET
+		skin = ET.fromstring(Guide.HaloGuide.skin)
+		names = {w.get("name") for w in skin.findall("widget") if w.get("name")}
+		guide = Guide.HaloGuide(Session(), self.services, 0, self.timers)
+		self.assertEqual(names, {name for name, component in guide.items() if isinstance(component, Label)})
 
 
 if __name__ == "__main__":
