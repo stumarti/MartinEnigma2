@@ -1,0 +1,68 @@
+name: Halo packages
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  engine:
+    # The animation patch must keep applying to openATV 8.0 and compiling.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply the patch to openATV 8.0
+        run: |
+          git clone --depth 1 -b 8.0 https://github.com/openatv/enigma2.git /tmp/enigma2
+          cd /tmp/enigma2
+          git apply -v "$GITHUB_WORKSPACE"/meta-halo/recipes-halo/enigma2/files/*.patch
+      - name: Compile-check the engine
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q libsigc++-3.0-dev python3-dev
+          cd /tmp/enigma2 && touch /tmp/config.h
+          for f in lib/gui/ewidgetanimation.cpp lib/gui/ewidget.cpp lib/gui/ewidgetdesktop.cpp; do
+            g++ -std=c++17 -fsyntax-only -I/tmp -I. -Iinclude -Ilib \
+              $(python3-config --includes) $(pkg-config --cflags sigc++-3.0) "$f"
+          done
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Test
+        run: python -m unittest discover -s tests -v
+
+      - name: Check the tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          test "${GITHUB_REF_NAME#v}" = "$(tr -d '[:space:]' < VERSION)" || {
+            echo "Tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+
+      - name: Build packages
+        run: SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) python tools/build_ipk.py --repo "$GITHUB_REPOSITORY" --out out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: halo-packages
+          path: out/
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" out/*.ipk out/SHA256SUMS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" out/*.ipk out/SHA256SUMS \
+              --title "Halo ${GITHUB_REF_NAME#v}" --generate-notes
+          fi

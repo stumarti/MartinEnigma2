@@ -1,0 +1,328 @@
+From 7a67452976b1cd645008d3fc7d07cd45f3e20642 Mon Sep 17 00:00:00 2001
+From: Halo <halo@localhost>
+Date: Sat, 21 Nov 2026 13:10:30 +0000
+Subject: [PATCH] Halo: time-based widget animation engine
+
+Replace the frame-stepped, move-only eWidgetAnimation with a timer-driven
+engine that moves a widget over a fixed duration with an easing curve
+(linear, ease-out cubic, ease-in-out cubic, ease-out back). Frames are
+computed from the monotonic clock, so slow frames skip ahead instead of
+stretching the animation, and it works in immediate and buffered
+composition modes.
+
+Expose eWidget.animateMove(), stopAnimation() and isAnimating() to Python.
+
+Add an opt-in switch for the buffered compositor: create
+/etc/enigma2/halo-buffered or set HALO_BUFFERED=1 before starting enigma2.
+---
+ lib/gui/ewidget.h            |   6 ++
+ lib/gui/ewidgetanimation.cpp | 157 +++++++++++++++++++++++++++--------
+ lib/gui/ewidgetanimation.h   |  58 ++++++++++++-
+ main/enigma.cpp              |   7 ++
+ 4 files changed, 192 insertions(+), 36 deletions(-)
+
+diff --git a/lib/gui/ewidget.h b/lib/gui/ewidget.h
+index fce78c2..e1b6457 100644
+--- a/lib/gui/ewidget.h
++++ b/lib/gui/ewidget.h
+@@ -99,6 +99,12 @@ public:
+ 
+ 	eWidgetAnimation m_animation;
+ 
++	/* Halo: time-based animated move, see eWidgetAnimation.
++	   Positions use the same coordinates as move(). */
++	void animateMove(ePoint from, ePoint to, int durationMs, int easing = eWidgetAnimation::easeOutCubic) { m_animation.startMove(from, to, durationMs, easing); }
++	void stopAnimation(int jumpToEnd = 1) { m_animation.stop(jumpToEnd); }
++	int isAnimating() { return m_animation.isRunning(); }
++
+ 	int getTag() const { return m_tag; }
+ 	void setTag(int tag) { m_tag = tag; }
+ 
+diff --git a/lib/gui/ewidgetanimation.cpp b/lib/gui/ewidgetanimation.cpp
+index 56bae5c..4652d92 100644
+--- a/lib/gui/ewidgetanimation.cpp
++++ b/lib/gui/ewidgetanimation.cpp
+@@ -1,55 +1,146 @@
+ #include <lib/gui/ewidgetanimation.h>
+ #include <lib/gui/ewidget.h>
+ 
+-eWidgetAnimation::eWidgetAnimation(eWidget *widget): m_widget(widget)
++int eWidgetAnimation::s_frame_interval = 16;
++
++eWidgetAnimation::eWidgetAnimation(eWidget *widget)
++	: m_active(0), m_widget(widget), m_duration(0), m_easing(easeOutCubic)
+ {
+-	m_active = 0;
++	m_start_time.tv_sec = 0;
++	m_start_time.tv_nsec = 0;
++}
++
++eWidgetAnimation::~eWidgetAnimation()
++{
++	if (m_timer)
++		m_timer->stop();
++}
++
++void eWidgetAnimation::setFrameInterval(int ms)
++{
++	if (ms < 5)
++		ms = 5;
++	if (ms > 100)
++		ms = 100;
++	s_frame_interval = ms;
+ }
+ 
++/* Legacy API: frames were ticked by the buffered desktop. Timing now comes
++ * from our own timer, so the desktop tick is ignored. */
+ void eWidgetAnimation::tick(int inc)
+ {
+-	if (!m_active)
+-		return;
++}
+ 
+-		// move animation
+-	if (m_move_length)
+-	{
+-		if (m_move_current_tick >= m_move_length)
+-		{
+-			m_active = 0;
+-			m_move_current_tick = m_move_length;
+-		}
++void eWidgetAnimation::startMoveAnimation(ePoint start, ePoint end, int length)
++{
++	startMove(start, end, length * 20, easeOutCubic);
++}
+ 
+-		m_move_start = m_widget->position();
++void eWidgetAnimation::startMove(ePoint start, ePoint end, int durationMs, int easing)
++{
++	m_move_start = start;
++	m_move_end = end;
++	m_duration = durationMs;
++	m_easing = easing;
+ 
+-		int xdiff = m_move_start.x() - m_move_end.x();
+-		int ydiff = m_move_start.y() - m_move_end.y();
++	if (m_duration <= 0)
++	{
++		m_active = 0;
++		if (m_timer)
++			m_timer->stop();
++		m_widget->move(m_move_end);
++		finished();
++		return;
++	}
+ 
+-		xdiff *= 31; xdiff /= 32;
+-		ydiff *= 31; ydiff /= 32;
++	if (!m_timer)
++	{
++		m_timer = eTimer::create(eApp);
++		CONNECT(m_timer->timeout, eWidgetAnimation::onFrame);
++	}
+ 
+-		#if 0
+-		xdiff *= m_move_current_tick;
+-		xdiff /= m_move_length;
++	clock_gettime(CLOCK_MONOTONIC, &m_start_time);
++	m_active = 1;
++	apply(0.0);
++	m_timer->start(s_frame_interval, false);
++}
+ 
+-		ydiff *= m_move_current_tick;
+-		ydiff /= m_move_length;
+-		#endif
++void eWidgetAnimation::stop(int jumpToEnd)
++{
++	if (!m_active)
++		return;
++	m_active = 0;
++	if (m_timer)
++		m_timer->stop();
++	if (jumpToEnd)
++		m_widget->move(m_move_end);
++}
+ 
+-		ePoint res(m_move_end.x() + xdiff, m_move_end.y() + ydiff);
++long eWidgetAnimation::elapsedMs(const timespec &since)
++{
++	timespec now;
++	clock_gettime(CLOCK_MONOTONIC, &now);
++	return (now.tv_sec - since.tv_sec) * 1000 + (now.tv_nsec - since.tv_nsec) / 1000000;
++}
+ 
+-		m_move_current_tick += inc;
++void eWidgetAnimation::onFrame()
++{
++	if (!m_active)
++	{
++		if (m_timer)
++			m_timer->stop();
++		return;
++	}
+ 
+-		m_widget->move(res);
++	long elapsed = elapsedMs(m_start_time);
++	if (elapsed >= m_duration)
++	{
++		m_active = 0;
++		m_timer->stop();
++		apply(1.0);
++		finished();
++		return;
+ 	}
++	apply((double)elapsed / (double)m_duration);
+ }
+ 
+-void eWidgetAnimation::startMoveAnimation(ePoint start, ePoint end, int length)
++void eWidgetAnimation::apply(double progress)
+ {
+-	m_move_current_tick = 0;
+-	m_move_length = length;
+-	m_move_start = start;
+-	m_move_end = end;
+-	m_active = 1;
+-	m_widget->move(m_move_start);
++	double e = ease(m_easing, progress);
++	int x = m_move_start.x() + (int)((m_move_end.x() - m_move_start.x()) * e + (e >= 0 ? 0.5 : -0.5));
++	int y = m_move_start.y() + (int)((m_move_end.y() - m_move_start.y()) * e + (e >= 0 ? 0.5 : -0.5));
++	m_widget->move(ePoint(x, y));
++}
++
++double eWidgetAnimation::ease(int curve, double t)
++{
++	if (t <= 0.0)
++		return 0.0;
++	if (t >= 1.0)
++		return 1.0;
++	switch (curve)
++	{
++	case easeLinear:
++		return t;
++	case easeInOutCubic:
++		if (t < 0.5)
++			return 4.0 * t * t * t;
++		else
++		{
++			double f = -2.0 * t + 2.0;
++			return 1.0 - f * f * f / 2.0;
++		}
++	case easeOutBack:
++	{
++		const double c1 = 1.70158, c3 = c1 + 1.0;
++		double f = t - 1.0;
++		return 1.0 + c3 * f * f * f + c1 * f * f;
++	}
++	case easeOutCubic:
++	default:
++	{
++		double f = 1.0 - t;
++		return 1.0 - f * f * f;
++	}
++	}
+ }
+diff --git a/lib/gui/ewidgetanimation.h b/lib/gui/ewidgetanimation.h
+index afc529f..7624250 100644
+--- a/lib/gui/ewidgetanimation.h
++++ b/lib/gui/ewidgetanimation.h
+@@ -3,23 +3,75 @@
+ 
+ #include <lib/gdi/esize.h>
+ #include <lib/gdi/epoint.h>
++#ifndef SWIG
++#include <lib/base/ebase.h>
++#include <lib/base/smartptr.h>
++#include <libsig_comp.h>
++#include <time.h>
++#endif
+ 
+ class eWidget;
+ 
++/*
++ * Time-based widget animation (Halo).
++ *
++ * Moves a widget from one position to another over a fixed duration in
++ * milliseconds, with an easing curve. It is driven by its own eTimer, so it
++ * works in both the immediate and the buffered composition modes. Frames are
++ * computed from the monotonic clock, so a slow frame never stretches the
++ * animation: it just skips ahead.
++ *
++ * Positions are in the same coordinates as eWidget::move().
++ */
+ class eWidgetAnimation
++#ifndef SWIG
++	: public sigc::trackable
++#endif
+ {
+ public:
++	enum {
++		easeLinear = 0,
++		easeOutCubic = 1,
++		easeInOutCubic = 2,
++		easeOutBack = 3,
++	};
++
+ 	eWidgetAnimation(eWidget *widget);
++	~eWidgetAnimation();
+ 
++	/* Legacy frame-based API, kept for compatibility. One frame = 20 ms. */
+ 	void tick(int inc);
+-
+ 	void startMoveAnimation(ePoint start, ePoint end, int length);
+ 
++	/* Move from start to end over durationMs, using an easing curve. */
++	void startMove(ePoint start, ePoint end, int durationMs, int easing = easeOutCubic);
++	/* Stop a running animation. jumpToEnd = 1 places the widget at its target. */
++	void stop(int jumpToEnd = 1);
++	int isRunning() const { return m_active; }
++
++	/* Frame interval in ms (default 16, about 60 fps). */
++	static void setFrameInterval(int ms);
++
+ 	int m_active;
++
++#ifndef SWIG
++	/* Emitted once, when an animation reaches its end (not when stopped). */
++	sigc::signal<void()> finished;
++
+ private:
+-	int m_move_current_tick, m_move_length;
+-	ePoint m_move_start, m_move_end;
++	void onFrame();
++	void apply(double progress);
++	static double ease(int curve, double t);
++	static long elapsedMs(const timespec &since);
++
+ 	eWidget *m_widget;
++	ePtr<eTimer> m_timer;
++	ePoint m_move_start, m_move_end;
++	int m_duration;
++	int m_easing;
++	timespec m_start_time;
++	static int s_frame_interval;
++#endif
+ };
+ 
+ #endif
+diff --git a/main/enigma.cpp b/main/enigma.cpp
+index e7a47d0..11f5e81 100644
+--- a/main/enigma.cpp
++++ b/main/enigma.cpp
+@@ -297,6 +297,13 @@ int main(int argc, char **argv)
+ 	}
+ 	*/
+ 
++	/* Halo: opt-in buffered composition for testing (project Phase 3). */
++	if (::access("/etc/enigma2/halo-buffered", F_OK) == 0 || getenv("HALO_BUFFERED"))
++	{
++		eDebug("[Enigma] Halo: buffered graphics mode enabled.");
++		dsk.setCompositionMode(eWidgetDesktop::cmBuffered);
++	}
++
+ 	wdsk = &dsk;
+ 	lcddsk = &dsk_lcd;
+ 
+-- 
+2.43.0
+
