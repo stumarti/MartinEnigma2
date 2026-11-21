@@ -1,10 +1,11 @@
 # Halo top menu: slides down over live TV when MENU is pressed.
 #
 # The menu window slides in from above the screen, and the white focus pill
-# slides between items as you move left and right. On close it slides back up
-# before the chosen action runs.
+# slides between items as you move left and right. The dark "on focus" text
+# follows the pill as it travels, so the label under the pill is always the
+# readable one. On close the menu slides back up before the chosen action runs.
 
-from enigma import gRGB
+from enigma import eTimer, gRGB
 
 from Components.ActionMap import ActionMap
 from Components.Label import Label
@@ -66,18 +67,41 @@ class HaloTopMenu(Screen):
 			"left": self.left,
 			"right": self.right,
 		}, -1)
+		self.painted = None
+		self.syncTimer = eTimer()
+		self.syncTimer.callback.append(self.followPill)
 		self.onLayoutFinish.append(self.slideIn)
 		self.onClose.append(self.animator.stop)
+		self.onClose.append(self.syncTimer.stop)
 
 	def itemX(self, index):
 		return ITEM_X0 + index * ITEM_STEP
 
-	def paintItems(self):
+	def paintItems(self, highlight=None):
+		"""Dark text for the item under the pill, light text for the rest."""
+		highlight = self.index if highlight is None else highlight
+		if highlight == self.painted:
+			return
 		for i in range(len(ITEMS)):
 			label = self["item%d" % i].instance
 			if label:
-				label.setForegroundColor(INK_ON_FOCUS if i == self.index else INK)
+				label.setForegroundColor(INK_ON_FOCUS if i == highlight else INK)
 				label.invalidate()
+		self.painted = highlight
+
+	def itemUnderPill(self):
+		focus = self["focus"].instance
+		if not focus:
+			return self.index
+		index = int(round((focus.position().x() - ITEM_X0) / float(ITEM_STEP)))
+		return max(0, min(len(ITEMS) - 1, index))
+
+	def followPill(self):
+		self.paintItems(self.itemUnderPill())
+
+	def pillArrived(self):
+		self.syncTimer.stop()
+		self.paintItems()
 
 	def slideIn(self):
 		self.paintItems()
@@ -89,8 +113,10 @@ class HaloTopMenu(Screen):
 		if focus:
 			# Start from wherever the pill is now, so fast key presses chain smoothly.
 			current = focus.position()
-			self.animator.move(focus, (current.x(), current.y()), (self.itemX(self.index), ITEM_Y), 180, EASE_OUT_CUBIC)
-		self.paintItems()
+			self.animator.move(focus, (current.x(), current.y()), (self.itemX(self.index), ITEM_Y), 180, EASE_OUT_CUBIC, onDone=self.pillArrived)
+			self.syncTimer.start(16, False)
+		else:
+			self.paintItems()
 
 	def left(self):
 		if not self.closing:

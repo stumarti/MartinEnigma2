@@ -288,7 +288,13 @@ class TopMenuTests(unittest.TestCase):
 		advance(0.4)
 		self.assertEqual(menu.instance.pos, (0, 0))
 		menu["actions"].actions["right"]()
+		advance(0.3)
 		menu["actions"].actions["right"]()
+		advance(0.06)  # mid-slide: the dark text follows the pill (at most a frame behind)
+		dark = [i for i in range(6) if menu["item%d" % i].instance.colour == TopMenu.INK_ON_FOCUS]
+		self.assertEqual(len(dark), 1)
+		pillIndex = (menu["focus"].instance.pos[0] - 360) / 216.0
+		self.assertLessEqual(abs(dark[0] - pillIndex), 1.0)
 		advance(0.3)
 		self.assertEqual(menu["focus"].instance.pos, (360 + 2 * 216, 52))
 		self.assertEqual(menu["item2"].instance.colour, TopMenu.INK_ON_FOCUS)
@@ -298,6 +304,17 @@ class TopMenuTests(unittest.TestCase):
 		advance(0.3)
 		self.assertEqual(menu.instance.pos, (0, -180))
 		self.assertEqual(menu.closed, "recordings")
+
+	def test_wrapping_left_sweeps_the_highlight_across(self):
+		menu = self.openMenu()
+		advance(0.4)
+		seen = set()
+		menu["actions"].actions["left"]()  # 0 -> 5: the pill travels the whole row
+		for _ in range(15):
+			advance(0.016)
+			seen.add(menu.painted)
+		self.assertEqual(menu.painted, 5)
+		self.assertGreaterEqual(len(seen), 3)
 
 	def test_left_wraps_and_back_closes_with_no_choice(self):
 		menu = self.openMenu()

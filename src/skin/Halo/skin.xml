@@ -10,12 +10,25 @@
 		<resolution xres="1920" yres="1080" bpp="32" />
 	</output>
 
+	<parameters>
+		<!-- Draw the EPG's "now" line and time ticks as plain coloured bars (no images needed). -->
+		<parameter name="EPGNativeControls" value="1" />
+	</parameters>
+
 	<colors>
 		<color name="haloInk" value="#00f4f6fa" />
 		<color name="haloInkQuiet" value="#00aeb6c4" />
 		<color name="haloGlass" value="#30121620" />
 		<color name="haloAccent" value="#005b9bff" />
 		<color name="haloClear" value="#ff000000" />
+		<color name="haloGround" value="#00090b10" />
+		<color name="haloCard" value="#00141922" />
+		<color name="haloCardNow" value="#00232a35" />
+		<color name="haloCardPast" value="#000e1117" />
+		<color name="haloInkPast" value="#006f7889" />
+		<color name="haloDark" value="#0007090c" />
+		<color name="haloTick" value="#00303846" />
+		<color name="haloRecord" value="#00e5484d" />
 	</colors>
 
 	<fonts>
@@ -57,5 +70,77 @@
 		<widget source="global.CurrentTime" render="Label" position="1600,876" size="184,40" font="Regular;30" foregroundColor="haloInk" backgroundColor="haloGlass" transparent="1" halign="right" zPosition="1">
 			<convert type="ClockToText">Format:%H:%M</convert>
 		</widget>
+	</screen>
+	<!-- TV Guide: openATV's grid EPG with the Halo look. Rows, cells, recording
+	     and zapping all come from openATV; this only places and colours them. -->
+	<screen name="GraphicalEPG" position="0,0" size="1920,1080" title="TV Guide" flags="wfNoBorder" backgroundColor="haloGround">
+		<eLabel text="TV Guide" position="96,44" size="420,64" font="Bold;44" foregroundColor="haloInk" backgroundColor="haloGround" valign="center" />
+		<widget source="Title" render="Label" position="520,44" size="1040,64" font="Regular;28" foregroundColor="haloInkQuiet" backgroundColor="haloGround" valign="center" noWrap="1" />
+		<widget source="global.CurrentTime" render="Label" position="1600,44" size="224,64" font="Regular;32" foregroundColor="haloInk" backgroundColor="haloGround" halign="right" valign="center">
+			<convert type="ClockToText">Format:%H:%M</convert>
+		</widget>
+
+		<!-- The highlighted programme -->
+		<eLabel position="96,132" size="1728,284" backgroundColor="haloCard" cornerRadius="28" zPosition="0" />
+		<widget source="Event" render="Label" position="136,156" size="90,36" font="Regular;26" foregroundColor="haloInkQuiet" backgroundColor="haloCard" transparent="1" zPosition="1">
+			<convert type="EventTime">StartTime</convert>
+			<convert type="ClockToText">Format:%H:%M</convert>
+		</widget>
+		<eLabel text="–" position="224,156" size="30,36" font="Regular;26" foregroundColor="haloInkQuiet" backgroundColor="haloCard" transparent="1" halign="center" zPosition="1" />
+		<widget source="Event" render="Label" position="256,156" size="90,36" font="Regular;26" foregroundColor="haloInkQuiet" backgroundColor="haloCard" transparent="1" zPosition="1">
+			<convert type="EventTime">EndTime</convert>
+			<convert type="ClockToText">Format:%H:%M</convert>
+		</widget>
+		<widget source="Event" render="Label" position="380,156" size="1404,36" font="Regular;26" foregroundColor="haloInkQuiet" backgroundColor="haloCard" transparent="1" noWrap="1" zPosition="1">
+			<convert type="EventName">GenreList</convert>
+		</widget>
+		<widget source="Event" render="Label" position="136,196" size="1648,64" font="Bold;46" foregroundColor="haloInk" backgroundColor="haloCard" transparent="1" noWrap="1" zPosition="1">
+			<convert type="EventName">Name</convert>
+		</widget>
+		<widget source="Event" render="Label" position="136,268" size="1648,104" font="Regular;26" foregroundColor="haloInkQuiet" backgroundColor="haloCard" transparent="1" zPosition="1">
+			<convert type="EventName">FullDescription</convert>
+		</widget>
+		<widget source="Event" render="Progress" position="136,388" size="1648,6" foregroundColor="haloAccent" backgroundColor="haloCardNow" cornerRadius="3" zPosition="1">
+			<convert type="EventTime">Progress</convert>
+		</widget>
+
+		<!-- Time ruler, bouquet chooser and the grid -->
+		<widget name="timeline_text" position="96,436" size="1728,44" itemHeight="44" TimelineFont="Regular;24" TimelineAlignment="left" foregroundColor="haloInkQuiet" backgroundColor="haloGround" borderColor="haloGround" borderWidth="0" transparent="1" zPosition="1" />
+		<widget name="bouquetlist" position="96,436" size="1728,44" itemHeight="44" font="Regular;24" foregroundColor="haloInk" backgroundColor="haloCard" foregroundColorSelected="haloDark" backgroundColorSelected="haloInk" borderColor="haloGround" borderWidth="0" zPosition="3" />
+		<widget name="list" position="96,488" size="1728,456" itemHeight="76" scrollbarMode="showNever" enableWrapAround="1" backgroundColor="haloGround" transparent="0"
+			ServiceFontGraphical="Bold;26" EntryFontGraphical="Regular;24"
+			ServiceForegroundColor="haloInk" ServiceForegroundColorNow="haloInk"
+			ServiceBackgroundColor="haloCard" ServiceBackgroundColorNow="haloCardNow"
+			ServiceBorderColor="haloGround" ServiceBorderWidth="4" ServiceNamePadding="16"
+			EntryForegroundColor="haloInk" EntryForegroundColorSelected="haloDark"
+			EntryBackgroundColor="haloCard" EntryBackgroundColorSelected="haloInk"
+			EntryForegroundColorNow="haloInk" EntryForegroundColorNowSelected="haloDark"
+			EntryBackgroundColorNow="haloCardNow" EntryBackgroundColorNowSelected="haloInk"
+			EntryForegroundColorPast="haloInkPast" EntryForegroundColorPastSelected="haloDark"
+			EntryBackgroundColorPast="haloCardPast" EntryBackgroundColorPastSelected="haloInk"
+			EntryBorderColor="haloGround" EventBorderWidth="4" EventNamePadding="14"
+			RecordForegroundColor="haloInk" RecordForegroundColorSelected="haloInk"
+			RecordBackgroundColor="haloRecord" RecordBackgroundColorSelected="#00b8383d"
+			ZapForegroundColor="haloInk" ZapForegroundColorSelected="haloDark"
+			ZapBackgroundColor="#00315a8f" ZapBackgroundColorSelected="#009cc2ff" />
+		<widget name="timeline_now" position="96,484" size="4,464" backgroundColor="haloAccent" zPosition="4" />
+		<widget name="timeline0" position="96,488" size="1,456" backgroundColor="haloTick" zPosition="2" />
+		<widget name="timeline1" position="96,488" size="1,456" backgroundColor="haloTick" zPosition="2" />
+		<widget name="timeline2" position="96,488" size="1,456" backgroundColor="haloTick" zPosition="2" />
+		<widget name="timeline3" position="96,488" size="1,456" backgroundColor="haloTick" zPosition="2" />
+		<widget name="timeline4" position="96,488" size="1,456" backgroundColor="haloTick" zPosition="2" />
+		<widget name="timeline5" position="96,488" size="1,456" backgroundColor="haloTick" zPosition="2" />
+		<widget name="lab1" position="96,700" size="1728,44" font="Regular;28" foregroundColor="haloInkQuiet" backgroundColor="haloGround" transparent="1" halign="center" valign="center" zPosition="5" />
+
+		<!-- Colour buttons -->
+		<eLabel position="136,991" size="18,18" backgroundColor="#00e5484d" cornerRadius="4" />
+		<widget source="key_red" render="Label" position="166,980" size="340,40" font="Regular;24" foregroundColor="haloInkQuiet" backgroundColor="haloGround" valign="center" noWrap="1" />
+		<eLabel position="526,991" size="18,18" backgroundColor="#003fb950" cornerRadius="4" />
+		<widget source="key_green" render="Label" position="556,980" size="340,40" font="Regular;24" foregroundColor="haloInkQuiet" backgroundColor="haloGround" valign="center" noWrap="1" />
+		<eLabel position="916,991" size="18,18" backgroundColor="#00e3b341" cornerRadius="4" />
+		<widget source="key_yellow" render="Label" position="946,980" size="340,40" font="Regular;24" foregroundColor="haloInkQuiet" backgroundColor="haloGround" valign="center" noWrap="1" />
+		<eLabel position="1306,991" size="18,18" backgroundColor="#004c8dff" cornerRadius="4" />
+		<widget source="key_blue" render="Label" position="1336,980" size="340,40" font="Regular;24" foregroundColor="haloInkQuiet" backgroundColor="haloGround" valign="center" noWrap="1" />
+		<widget source="key_info" render="Label" position="1704,980" size="120,40" font="Regular;22" foregroundColor="haloInkPast" backgroundColor="haloGround" halign="right" valign="center" />
 	</screen>
 </skin>

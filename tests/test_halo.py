@@ -165,5 +165,21 @@ class SourceTests(unittest.TestCase):
 			self.assertEqual(widgets["item%d" % i].get("position"), "%d,52" % (360 + i * 216))
 
 
+	def test_epg_skin_uses_only_widgets_openatv_provides(self):
+		import xml.etree.ElementTree as ET
+		skin = ET.parse(os.path.join(ROOT, "src", "skin", "Halo", "skin.xml")).getroot()
+		epg = skin.find("screen[@name='GraphicalEPG']")
+		self.assertIsNotNone(epg)
+		# Names created by openATV 8.0's EPGSelectionGrid (and its base classes).
+		provided = {"list", "timeline_text", "bouquetlist", "timeline_now", "lab1", "primetime", "change_bouquet", "jump", "page", "number"}
+		provided |= {"timeline%d" % i for i in range(6)}
+		sources = {"Event", "Service", "Title", "key_red", "key_green", "key_yellow", "key_blue", "key_info", "key_menu", "key_text", "key_epg", "key_play", "global.CurrentTime"}
+		for widget in epg.findall("widget"):
+			if widget.get("name"):
+				self.assertIn(widget.get("name"), provided)
+			else:
+				self.assertIn(widget.get("source"), sources)
+		self.assertEqual(skin.find("parameters/parameter[@name='EPGNativeControls']").get("value"), "1")
+
 if __name__ == "__main__":
 	unittest.main()
